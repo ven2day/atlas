@@ -5,9 +5,14 @@ import { expect, test } from "@playwright/test";
 
 import { decisionId, open } from "./helpers";
 
-const PATHS = ["/", "/decisions", "/blotter", "/risk", "/ai", "/experiment", "/market?symbol=TCS", "/system"];
+const PATHS = ["/", "/decisions", "/blotter", "/risk", "/ai", "/research", "/experiment", "/market?symbol=TCS", "/system"];
 
 async function scan(page: import("@playwright/test").Page) {
+  // Measure the settled UI, not the deliberately translucent opening-animation frame.
+  await page.getByRole("dialog").evaluateAll(async (dialogs) => {
+    await Promise.all(dialogs.flatMap((dialog) => dialog.getAnimations({ subtree: true }))
+      .map((animation) => animation.finished.catch(() => undefined)));
+  });
   const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
   return result.violations
     .filter((v) => v.impact === "serious" || v.impact === "critical")
