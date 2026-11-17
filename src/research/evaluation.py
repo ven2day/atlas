@@ -36,6 +36,7 @@ from src.domain.types import Product, Side
 from src.marketdata.history import DailySeries
 from src.research.mapping import EventImpact, ImpactScope
 from src.research.store import ResearchStore
+from src.research.timing import first_close_after
 
 EVENT_STUDY_HORIZONS: tuple[int, ...] = (1, 3, 5, 10)
 # Below this many observations a cell reports counts but no percentage, because a mean of three
@@ -147,7 +148,7 @@ def event_study(
         if moment is None:
             continue
         dates = _session_dates(bars)
-        start = _first_session_on_or_after(dates, moment.date())
+        start = first_close_after(dates, moment)
         if start is None:
             continue  # the event is not yet followed by any settled session
         close = bars.adjusted()["close"].astype(float)
@@ -160,11 +161,10 @@ def event_study(
                 continue
             against = 0.0
             if bench_close is not None:
-                bench_start = _first_session_on_or_after(bench_dates, dates[start])
-                bench_return = (
-                    None
-                    if bench_start is None
-                    else _log_return(bench_close, bench_start, bench_start + horizon)
+                if dates[start] not in bench_dates or dates[end] not in bench_dates:
+                    continue
+                bench_return = _log_return(
+                    bench_close, bench_dates.index(dates[start]), bench_dates.index(dates[end])
                 )
                 if bench_return is None:
                     continue  # no benchmark over the same window: skip rather than assume zero
@@ -237,9 +237,9 @@ def settle_forecasts(
             anchor = date.fromisoformat(raw_bar_date)
         except ValueError:
             continue
-        start = _first_session_on_or_after(dates, anchor)
-        if start is None:
+        if anchor not in dates:
             continue
+        start = dates.index(anchor)
         horizon = int(row["horizon_sessions"])
         end = start + horizon
         if end >= len(dates) or dates[end] > as_of.date():
@@ -250,9 +250,10 @@ def settle_forecasts(
             continue
         against: float | None = None
         if bench_close is not None:
-            bench_start = _first_session_on_or_after(bench_dates, dates[start])
-            if bench_start is not None:
-                against = _log_return(bench_close, bench_start, bench_start + horizon)
+            if dates[start] in bench_dates and dates[end] in bench_dates:
+                against = _log_return(
+                    bench_close, bench_dates.index(dates[start]), bench_dates.index(dates[end])
+                )
         band = row.get("sideways_band")
         bucket = _bucket(realized, None if band is None else float(band))
         store.record_outcome(

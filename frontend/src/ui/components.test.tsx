@@ -96,15 +96,24 @@ const columns: Columns<Row> = [
 
 describe("DataTable", () => {
   // jsdom has no layout: give every element a 800x400 box so the virtualiser has a viewport.
-  const size = (name: "offsetHeight" | "offsetWidth", value: number) =>
+  const size = (name: "offsetHeight" | "offsetWidth" | "clientHeight" | "clientWidth", value: number) =>
     Object.defineProperty(HTMLElement.prototype, name, { configurable: true, get: () => value });
   beforeEach(() => {
     size("offsetHeight", 400);
     size("offsetWidth", 800);
+    size("clientHeight", 400);
+    size("clientWidth", 800);
+    // Virtualizer versions may measure via a DOM rect rather than offset dimensions.
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, top: 0, left: 0, right: 800, bottom: 400,
+      width: 800, height: 400, toJSON: () => ({}),
+    });
   });
   afterEach(() => {
     size("offsetHeight", 0);
     size("offsetWidth", 0);
+    size("clientHeight", 0);
+    size("clientWidth", 0);
   });
 
   it("virtualises thousands of rows, sorts, and opens a row", () => {

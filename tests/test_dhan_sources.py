@@ -85,7 +85,15 @@ class FakeDhan:
             raise self.error
         return self.quote_payloads
 
-    async def historical_daily(self, security_id: str, *, frm: Any, to: Any) -> CandleFrame:
+    async def historical_daily(
+        self,
+        security_id: str,
+        *,
+        frm: Any,
+        to: Any,
+        segment: str = "NSE_EQ",
+        instrument: str = "EQUITY",
+    ) -> CandleFrame:
         self.daily_calls.append((security_id, frm, to))
         if self.error is not None:
             raise self.error

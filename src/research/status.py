@@ -33,6 +33,7 @@ CONFIRM_MIN_SAMPLES = 30
 CONFIRM_PROB_MARGIN = 0.05
 # Relative strength that counts as the instrument actually leading its benchmark.
 CONFIRM_MIN_RS = 0.0
+CONFIRM_MIN_CATALYST_CONFIDENCE = 0.55
 
 
 class CandidateStatus(StrEnum):
@@ -106,6 +107,15 @@ def decide_status(
         )
 
     direction = best.direction
+    directions = {i.direction for i in issuer}
+    if ImpactDirection.POSITIVE in directions and ImpactDirection.NEGATIVE in directions:
+        return StatusDecision(
+            status=CandidateStatus.WATCH,
+            reasons=("current issuer catalysts conflict; no single directional thesis",),
+            confirm_if=("the conflicting catalysts are resolved with new evidence",),
+            weaken_if=(),
+            invalidate_if=(),
+        )
     reasons.append(
         f"catalyst: {best.event_id} acts through {best.channel.value}, direction "
         f"{direction.value}, basis {best.basis}" + (", flagged uncertain" if best.uncertain else "")
@@ -229,12 +239,27 @@ def decide_status(
     )
     enough_samples = forecast.n_samples >= CONFIRM_MIN_SAMPLES
     strong_rs = context.relative_strength.get(20)
-    rs_ok = strong_rs is None or strong_rs >= CONFIRM_MIN_RS
+    rs_ok = strong_rs is not None and (
+        strong_rs >= CONFIRM_MIN_RS if positive else strong_rs <= -CONFIRM_MIN_RS
+    )
     if context.trend is TrendState.UNKNOWN:
         rs_ok = False
         reasons.append("the trend is unknown, so the setup is not confirmed")
 
-    if aligned and enough_samples and rs_ok and confirmation is Confirmation.CONFIRMS:
+    evidence_ok = (
+        not best.uncertain
+        and best.confidence is not None
+        and best.confidence >= CONFIRM_MIN_CATALYST_CONFIDENCE
+    )
+    if not evidence_ok:
+        reasons.append("the catalyst evidence is uncertain or its confidence is missing")
+    if (
+        aligned
+        and enough_samples
+        and rs_ok
+        and evidence_ok
+        and confirmation is Confirmation.CONFIRMS
+    ):
         reasons.append("the catalyst, the market context and the forecast distribution all agree")
         return StatusDecision(
             status=CandidateStatus.CONFIRMED,

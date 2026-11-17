@@ -19,6 +19,7 @@ never sent to the data APIs.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from urllib.parse import parse_qs, urlparse
 
 import httpx2
@@ -94,7 +95,7 @@ async def consume_consent(
     token_id: str,
     api_key: str,
     api_secret: str,
-    now,
+    now: datetime,
 ) -> DhanToken:
     response = await client.get(
         f"{base_url.rstrip('/')}{CONSUME_PATH}",

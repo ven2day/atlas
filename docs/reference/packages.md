@@ -371,6 +371,7 @@ Imports: `brokers`, `config`, `domain`, `engine`, `features`, `marketdata`, `ref
 | `research/snapshot.py` | The research run's published snapshot: one JSON file the console reads. |
 | `research/status.py` | Candidate status: WATCH, SETUP_FORMING, CONFIRMED, INVALIDATED, NO_TRADE. |
 | `research/store.py` | Durable state for the research layer, in the environment's own SQLite database. |
+| `research/timing.py` | Calendar-aware boundaries for close-to-close research measurements. |
 
 ## `src/risk`
 

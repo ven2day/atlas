@@ -344,7 +344,15 @@ def build_cards(
             relative_strength_by_lookback=relative_strength(bars, benchmark),
         )
         prediction = (
-            forecast(bars, horizon=horizon, as_of=as_of, regime=regime, benchmark=benchmark)
+            forecast(
+                bars,
+                horizon=horizon,
+                as_of=as_of,
+                regime=regime,
+                benchmark=benchmark,
+                catalyst=max(own, key=lambda e: (e.known_at, e.event_id)),
+                historical_events=events,
+            )
             if bars is not None
             else None
         )

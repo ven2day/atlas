@@ -48,7 +48,7 @@ from src.research.mapping import map_events
 from src.research.snapshot import reports_dir_for, write_snapshot
 from src.research.store import ResearchStore, known_at_by_id
 from src.store.event_store import EventStore
-from src.utils.market_time import now_ist
+from src.utils.market_time import IST, now_ist
 
 logger = logging.getLogger(__name__)
 
@@ -75,11 +75,15 @@ class ResearchRun:
         return f"{len(self.cards)} candidate(s) [{counts}] at {self.as_of.isoformat()}"
 
 
-def _latest_regime(store: EventStore) -> tuple[Regime | None, date | None]:
+def _latest_regime(store: EventStore, as_of: datetime) -> tuple[Regime | None, date | None]:
     """The most recent regime the engine computed. ``None`` when it has never run."""
     for event in reversed(store.read(types=["RegimeComputed"])):
         payload = event.payload
-        if isinstance(payload, RegimeComputed):
+        if (
+            isinstance(payload, RegimeComputed)
+            and event.ts_utc <= as_of
+            and payload.session_date <= as_of.astimezone(IST).date()
+        ):
             return payload.label, payload.bar_date
     return None, None
 
@@ -194,7 +198,7 @@ async def run_research(
             except (ValueError, KeyError) as exc:
                 gaps.append(f"{key}: features could not be computed ({exc})")
 
-        regime, _regime_bar = _latest_regime(event_store)
+        regime, _regime_bar = _latest_regime(event_store, moment)
         if regime is None:
             gaps.append(
                 "no RegimeComputed event is stored: market context is reported without a regime "
@@ -248,7 +252,7 @@ async def run_research(
                 series,
                 benchmark=benchmark,
                 known_at=known_at_by_id(events),
-                regime_by_date=_regime_by_date(event_store),
+                regime_by_date=_regime_by_date(event_store, moment),
                 cost_pct=cost_pct,
             )
         )
@@ -281,12 +285,12 @@ async def run_research(
             event_store.close()
 
 
-def _regime_by_date(store: EventStore) -> dict[date, str]:
+def _regime_by_date(store: EventStore, as_of: datetime) -> dict[date, str]:
     """Session date -> regime label, so an event study can group by the regime it happened in."""
     out: dict[date, str] = {}
     for event in store.read(types=["RegimeComputed"]):
         payload = event.payload
-        if isinstance(payload, RegimeComputed):
+        if isinstance(payload, RegimeComputed) and event.ts_utc <= as_of:
             out[payload.session_date] = payload.label.value
     return out
 
