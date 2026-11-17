@@ -195,7 +195,6 @@
             "type": "string"
           },
           "ai_spend_inr_to_date": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Ai Spend Inr To Date",
             "type": "string"
           },
@@ -204,7 +203,6 @@
             "type": "string"
           },
           "capital": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Capital",
             "type": "string"
           },
@@ -215,7 +213,6 @@
           "equity": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -227,7 +224,6 @@
           "equity_difference_inr": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -239,7 +235,6 @@
           "net_ai_value_inr": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -249,7 +244,6 @@
             "title": "Net Ai Value Inr"
           },
           "realized_net_to_date": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Realized Net To Date",
             "type": "string"
           },
@@ -339,7 +333,6 @@
           "equity": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -420,7 +413,6 @@
           "cash": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -432,7 +424,6 @@
           "day_pnl": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -455,7 +446,6 @@
           "equity": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -477,7 +467,6 @@
             "type": "integer"
           },
           "realized_pnl_today": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Realized Pnl Today",
             "type": "string"
           },
@@ -488,7 +477,6 @@
           "unrealized_pnl": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -632,7 +620,6 @@
             "type": "string"
           },
           "llm_budget_daily_inr": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Llm Budget Daily Inr",
             "type": "string"
           },
@@ -920,12 +907,10 @@
             "type": "number"
           },
           "equity": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Equity",
             "type": "string"
           },
           "peak": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Peak",
             "type": "string"
           },
@@ -986,7 +971,6 @@
             "type": "array"
           },
           "capital": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Capital",
             "type": "string"
           }
@@ -1080,7 +1064,6 @@
           "arrival_price": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -1092,7 +1075,6 @@
           "avg_fill_price": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -1106,7 +1088,6 @@
             "type": "string"
           },
           "charges": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Charges",
             "type": "string"
           },
@@ -1117,7 +1098,6 @@
           "decision_price": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -1194,7 +1174,6 @@
             "type": "string"
           },
           "charges": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Charges",
             "type": "string"
           },
@@ -1215,7 +1194,6 @@
             "type": "string"
           },
           "price": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Price",
             "type": "string"
           },
@@ -1383,7 +1361,6 @@
           "cost_inr": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -1395,7 +1372,6 @@
           "cost_usd": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -1705,7 +1681,6 @@
           "avg_fill_price": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -1837,7 +1812,6 @@
           "avg_price": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -1891,7 +1865,6 @@
           "mark": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -1909,14 +1882,12 @@
             "type": "integer"
           },
           "realized_pnl": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Realized Pnl",
             "type": "string"
           },
           "stop_price": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -1943,7 +1914,6 @@
           "target_price": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -1955,7 +1925,6 @@
           "unrealized_pnl": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -3375,12 +3344,10 @@
             "type": "integer"
           },
           "cost_inr": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Cost Inr",
             "type": "string"
           },
           "cost_usd": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Cost Usd",
             "type": "string"
           },
@@ -3428,7 +3395,6 @@
             "type": "array"
           },
           "total_inr": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Total Inr",
             "type": "string"
           }
@@ -3767,7 +3733,6 @@
             "type": "string"
           },
           "charges": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Charges",
             "type": "string"
           },
@@ -3776,7 +3741,6 @@
             "type": "string"
           },
           "entry_price": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Entry Price",
             "type": "string"
           },
@@ -3797,7 +3761,6 @@
             "title": "Exit Decision Id"
           },
           "exit_price": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Exit Price",
             "type": "string"
           },
@@ -3811,7 +3774,6 @@
             "type": "string"
           },
           "gross_pnl": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Gross Pnl",
             "type": "string"
           },
@@ -3820,7 +3782,6 @@
             "type": "string"
           },
           "net_pnl": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Net Pnl",
             "type": "string"
           },
@@ -3965,7 +3926,6 @@
             "type": "string"
           },
           "limit": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Limit",
             "type": "string"
           },
@@ -3979,7 +3939,6 @@
             "type": "string"
           },
           "used": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Used",
             "type": "string"
           }
