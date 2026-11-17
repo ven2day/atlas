@@ -8,6 +8,7 @@ const Blotter = lazy(() => import("../screens/Blotter"));
 const RiskCenter = lazy(() => import("../screens/RiskCenter"));
 const AIDesk = lazy(() => import("../screens/AIDesk"));
 const Experiment = lazy(() => import("../screens/Experiment"));
+const Research = lazy(() => import("../screens/Research"));
 const Market = lazy(() => import("../screens/Market"));
 const System = lazy(() => import("../screens/System"));
 
@@ -78,10 +79,20 @@ export const SCREENS: Screen[] = [
     element: <Experiment />,
   },
   {
+    path: "/research",
+    icon: "spark",
+    label: "Research",
+    key: "7",
+    group: "Research",
+    blurb:
+      "Event-aware candidates with probabilistic forecasts, the evidence and conditions behind each, and how well past forecasts calibrated. Decision support only: it never places an order.",
+    element: <Research />,
+  },
+  {
     path: "/market",
     icon: "market",
     label: "Market",
-    key: "7",
+    key: "8",
     group: "Research",
     blurb: "Research one symbol: quote, daily history, indicators over real OHLCV, and the system's own entries, exits and announcements.",
     element: <Market />,
@@ -90,7 +101,7 @@ export const SCREENS: Screen[] = [
     path: "/system",
     icon: "system",
     label: "System",
-    key: "8",
+    key: "9",
     group: "Research",
     blurb: "Engine health, feed freshness, reconciliation, the read-only configuration, logs and versions.",
     element: <System />,

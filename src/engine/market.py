@@ -15,15 +15,21 @@ import logging
 from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from datetime import date
 from decimal import Decimal
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from src.domain.events import Alert
 from src.domain.sink import EventSink
 from src.domain.types import Instrument, Quote
 from src.features.technical import Features, compute_features
+from src.marketdata.composite import HistorySourceLike
 from src.marketdata.history import DailySeries, HistoryResult, alert_failures
 from src.marketdata.yfinance_source import PollResult
 from src.risk.snapshot import MarketFacts
+
+if TYPE_CHECKING:
+    from src.config.settings import Settings
+    from src.marketdata.dhan.instruments import DhanMapping
+    from src.store.tape import TapeWriter
 
 logger = logging.getLogger(__name__)
 
@@ -170,3 +176,54 @@ class MarketService:
             adv_shares=f.adv20_shares if f is not None else None,
             data_source=quote.source if quote is not None else None,
         )
+
+
+# -- history source selection -------------------------------------------------------------------
+
+INDEX_SYMBOL = "NIFTY50"
+
+
+def dhan_index_instrument(overrides: Mapping[str, DhanMapping]) -> Instrument | None:
+    """NIFTY 50 as a Dhan-priced instrument, when ``DHAN_SECURITY_IDS`` maps it (segment IDX_I).
+
+    Dhan's cash-equity scrip master has no row for an index, so without that mapping the index
+    has to come from the secondary source.
+    """
+    from src.marketdata.dhan.instruments import INDEX_SEGMENT
+
+    mapping = overrides.get(INDEX_SYMBOL)
+    if mapping is None or mapping.segment != INDEX_SEGMENT:
+        return None
+    return Instrument(
+        key=INDEX_KEY, exchange="NSE", segment="INDEX", symbol=INDEX_SYMBOL, series="INDEX",
+        broker_tokens={"dhan": mapping.security_id},
+    )  # fmt: skip
+
+
+def build_history_source(
+    settings: Settings, *, tape: TapeWriter | None = None
+) -> HistorySourceLike:
+    """The daily-history source for the configured provider, index included.
+
+    Provider selection lives here so that anything reading daily bars - the research path today,
+    other read-only consumers later - agrees with the session about where prices come from and
+    keeps each bar's own ``source`` rather than blending providers. Imports are local: this keeps
+    the Dhan stack out of the import graph of a CLI-only or YFinance-only install.
+    """
+    from src.marketdata.composite import CompositeHistorySource
+    from src.marketdata.history import YFinanceHistorySource
+
+    if settings.market_data_provider != "dhan":
+        return YFinanceHistorySource(tape=tape)
+
+    from src.marketdata.dhan.history import DhanHistorySource
+    from src.marketdata.dhan.setup import build_client, security_overrides
+
+    overrides = security_overrides(settings)
+    index_instrument = dhan_index_instrument(overrides)
+    return CompositeHistorySource(
+        primary=DhanHistorySource(client=build_client(settings), tape=tape, overrides=overrides),
+        secondary=YFinanceHistorySource(tape=tape),  # the NIFTY index, for the regime
+        secondary_keys=set() if index_instrument is not None else {INDEX_KEY},
+        extra_instruments=[index_instrument] if index_instrument is not None else [],
+    )

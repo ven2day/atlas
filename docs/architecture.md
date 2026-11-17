@@ -206,8 +206,18 @@ the go/no-go gate: at least 200 closed trades and a 95% bootstrap CI of the mean
 per trade above zero. `scripts/validate_strategy.py` runs it on YFinance history or on the
 point-in-time NSE bhavcopy dataset (`src/marketdata/bhavcopy.py`).
 
+`src/research/` is a separate, **read-only** decision-support layer: it turns the announcements the
+engine already ingested into normalized point-in-time events, maps them onto instruments and
+sectors through an explicit rule table, forecasts the forward-return distribution from historical
+analogs, and publishes explainable candidate cards (`WATCH` / `SETUP_FORMING` / `CONFIRMED` /
+`INVALIDATED` / `NO_TRADE`) to the console's Research screen. It imports neither the OMS nor the
+risk gate and cannot produce an order. Its forecasts are scored against later outcomes, so
+calibration is measured rather than asserted. See [docs/research.md](research.md).
+
 ## Further reading
 
+- [docs/research.md](research.md): the event-aware research layer - catalysts, probabilistic
+  forecasts, candidate statuses and how they are evaluated.
 - [docs/plan/2026-10-01-platform-v2-plan.md](plan/2026-10-01-platform-v2-plan.md): the plan
   (source of truth) and [PROGRESS.md](plan/PROGRESS.md), with every design decision and
   verified fact.

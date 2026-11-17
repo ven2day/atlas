@@ -236,6 +236,33 @@ pre-open (09:00 IST); started after the day's session, it exits. To run it every
 `scripts/install_windows_task.ps1` (see [daily operations](docs/runbooks/daily-ops.md)).
 </details>
 
+## 🔬 Research: event-aware candidates
+
+A read-only decision-support layer, separate from order execution. It turns the announcements the
+engine already ingests into normalized, point-in-time events, maps them onto instruments and
+sectors through an explicit rule table, forecasts the **forward-return distribution** from
+historical analogs, and publishes one explainable card per candidate.
+
+```bash
+uv run python scripts/run_research.py                 # today, 5-session horizon
+uv run python scripts/run_research.py --horizon 10 --status CONFIRMED
+uv run python scripts/run_research.py --report var/reports/research.md
+```
+
+Results also appear in the console under **Research**, with filters for asset, sector, event type,
+status and confidence. Every matching candidate is listed - there is no "top five" cut.
+
+Each card separates five things that are often blurred together: the **event thesis** (with the
+evidence cited), the **market context** (does price action confirm or disagree?), the **forecast**
+(`p_up` / `p_side` / `p_down`, a q10-q90 return range, the analog sample size), the **status**
+(`WATCH`, `SETUP_FORMING`, `CONFIRMED`, `INVALIDATED`, `NO_TRADE`), and **what is missing**.
+
+It is deliberately blunt about its own limits: too few analogs yields `INSUFFICIENT_EVIDENCE`
+rather than a manufactured probability, an asset with no configured source yields `UNSUPPORTED`
+rather than a placeholder price, and no model is ever asked for a number. Published forecasts are
+scored against later outcomes, so calibration is measured - a Brier score and a reliability table,
+never a claim of profit. Full detail in **[docs/research.md](docs/research.md)**.
+
 ## ⚙️ Configuration
 
 Everything is optional and lives in `.env`; start from **[.env.example](.env.example)**.

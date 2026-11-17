@@ -2123,6 +2123,1073 @@
         "title": "ReportSummary",
         "type": "object"
       },
+      "ResearchCalibrationCell": {
+        "properties": {
+          "bucket": {
+            "title": "Bucket",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "predicted": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predicted"
+          },
+          "realized": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Realized"
+          }
+        },
+        "required": [
+          "bucket",
+          "n",
+          "predicted",
+          "realized"
+        ],
+        "title": "ResearchCalibrationCell",
+        "type": "object"
+      },
+      "ResearchCandidate": {
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "asset": {
+            "title": "Asset",
+            "type": "string"
+          },
+          "company": {
+            "title": "Company",
+            "type": "string"
+          },
+          "confirm_if": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Confirm If",
+            "type": "array"
+          },
+          "confirmation": {
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "confirmation_reason": {
+            "title": "Confirmation Reason",
+            "type": "string"
+          },
+          "context": {
+            "$ref": "#/components/schemas/ResearchContext"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchCardEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "forecast": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchForecast"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/ResearchFreshness"
+          },
+          "horizon_sessions": {
+            "title": "Horizon Sessions",
+            "type": "integer"
+          },
+          "instrument_key": {
+            "title": "Instrument Key",
+            "type": "string"
+          },
+          "invalidate_if": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Invalidate If",
+            "type": "array"
+          },
+          "negative_factors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Negative Factors",
+            "type": "array"
+          },
+          "positive_factors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Positive Factors",
+            "type": "array"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "sector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sector"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "unsupported": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unsupported",
+            "type": "array"
+          },
+          "weaken_if": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Weaken If",
+            "type": "array"
+          }
+        },
+        "required": [
+          "instrument_key",
+          "symbol",
+          "company",
+          "sector",
+          "asset",
+          "horizon_sessions",
+          "status",
+          "as_of",
+          "events",
+          "forecast",
+          "context",
+          "confirmation",
+          "confirmation_reason",
+          "positive_factors",
+          "negative_factors",
+          "reasons",
+          "confirm_if",
+          "weaken_if",
+          "invalidate_if",
+          "unsupported",
+          "freshness"
+        ],
+        "title": "ResearchCandidate",
+        "type": "object"
+      },
+      "ResearchCardEvent": {
+        "properties": {
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Type"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "excerpt": {
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "known_at": {
+            "format": "date-time",
+            "title": "Known At",
+            "type": "string"
+          },
+          "materiality": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materiality"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "uncertain": {
+            "title": "Uncertain",
+            "type": "boolean"
+          },
+          "updates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Updates",
+            "type": "array"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "event_id",
+          "published_at",
+          "known_at",
+          "source",
+          "url",
+          "event_type",
+          "subject",
+          "excerpt",
+          "direction",
+          "materiality",
+          "channel",
+          "scope",
+          "confidence",
+          "basis",
+          "uncertain",
+          "reason",
+          "evidence",
+          "updates"
+        ],
+        "title": "ResearchCardEvent",
+        "type": "object"
+      },
+      "ResearchContext": {
+        "properties": {
+          "adv20_inr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adv20 Inr"
+          },
+          "adx_14": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adx 14"
+          },
+          "annualized_vol": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annualized Vol"
+          },
+          "atr_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Atr Pct"
+          },
+          "bar_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bar Date"
+          },
+          "bars": {
+            "title": "Bars",
+            "type": "integer"
+          },
+          "bb_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bb Percent"
+          },
+          "close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Close"
+          },
+          "data_quality": {
+            "title": "Data Quality",
+            "type": "string"
+          },
+          "instrument_key": {
+            "title": "Instrument Key",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "regime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime"
+          },
+          "relative_strength": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Relative Strength",
+            "type": "object"
+          },
+          "rsi_14": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rsi 14"
+          },
+          "sigma_daily": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sigma Daily"
+          },
+          "trend": {
+            "title": "Trend",
+            "type": "string"
+          },
+          "volume_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Ratio"
+          }
+        },
+        "required": [
+          "instrument_key",
+          "bar_date",
+          "bars",
+          "regime",
+          "trend",
+          "close",
+          "rsi_14",
+          "adx_14",
+          "atr_pct",
+          "bb_percent",
+          "sigma_daily",
+          "annualized_vol",
+          "volume_ratio",
+          "adv20_inr",
+          "relative_strength",
+          "data_quality",
+          "notes"
+        ],
+        "title": "ResearchContext",
+        "type": "object"
+      },
+      "ResearchEvaluation": {
+        "properties": {
+          "brier": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brier"
+          },
+          "by_horizon": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/ResearchCalibrationCell"
+              },
+              "type": "array"
+            },
+            "title": "By Horizon",
+            "type": "object"
+          },
+          "by_regime": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/ResearchCalibrationCell"
+              },
+              "type": "array"
+            },
+            "title": "By Regime",
+            "type": "object"
+          },
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchCalibrationCell"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "settled": {
+            "title": "Settled",
+            "type": "integer"
+          },
+          "study": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchEventStudyCell"
+            },
+            "title": "Study",
+            "type": "array"
+          }
+        },
+        "required": [
+          "settled",
+          "brier",
+          "cells",
+          "by_horizon",
+          "by_regime",
+          "study",
+          "notes"
+        ],
+        "title": "ResearchEvaluation",
+        "type": "object"
+      },
+      "ResearchEventStudyCell": {
+        "properties": {
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hit Rate"
+          },
+          "horizon_sessions": {
+            "title": "Horizon Sessions",
+            "type": "integer"
+          },
+          "mean_abnormal_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Abnormal Return"
+          },
+          "mean_net_abnormal_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Net Abnormal Return"
+          },
+          "median_abnormal_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Abnormal Return"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "regime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime"
+          },
+          "round_trip_cost_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Round Trip Cost Pct"
+          }
+        },
+        "required": [
+          "event_type",
+          "direction",
+          "horizon_sessions",
+          "regime",
+          "n",
+          "mean_abnormal_return",
+          "median_abnormal_return",
+          "hit_rate",
+          "round_trip_cost_pct",
+          "mean_net_abnormal_return",
+          "notes"
+        ],
+        "title": "ResearchEventStudyCell",
+        "type": "object"
+      },
+      "ResearchEvidence": {
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "note"
+        ],
+        "title": "ResearchEvidence",
+        "type": "object"
+      },
+      "ResearchForecast": {
+        "properties": {
+          "annualized_vol": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annualized Vol"
+          },
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "bar_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bar Date"
+          },
+          "baseline": {
+            "title": "Baseline",
+            "type": "string"
+          },
+          "data_quality": {
+            "title": "Data Quality",
+            "type": "string"
+          },
+          "horizon_sessions": {
+            "title": "Horizon Sessions",
+            "type": "integer"
+          },
+          "instrument_key": {
+            "title": "Instrument Key",
+            "type": "string"
+          },
+          "n_samples": {
+            "title": "N Samples",
+            "type": "integer"
+          },
+          "n_unconditional": {
+            "title": "N Unconditional",
+            "type": "integer"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "p_down": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Down"
+          },
+          "p_side": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Side"
+          },
+          "p_underperform_benchmark": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Underperform Benchmark"
+          },
+          "p_up": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Up"
+          },
+          "q10": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q10"
+          },
+          "q50": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q50"
+          },
+          "q90": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q90"
+          },
+          "regime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime"
+          },
+          "sideways_band": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sideways Band"
+          },
+          "sigma_daily": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sigma Daily"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "trend": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trend"
+          },
+          "vol_band": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vol Band"
+          }
+        },
+        "required": [
+          "instrument_key",
+          "horizon_sessions",
+          "status",
+          "as_of",
+          "bar_date",
+          "regime",
+          "baseline",
+          "p_up",
+          "p_side",
+          "p_down",
+          "q10",
+          "q50",
+          "q90",
+          "p_underperform_benchmark",
+          "sideways_band",
+          "n_samples",
+          "n_unconditional",
+          "trend",
+          "vol_band",
+          "annualized_vol",
+          "sigma_daily",
+          "data_quality",
+          "notes"
+        ],
+        "title": "ResearchForecast",
+        "type": "object"
+      },
+      "ResearchFreshness": {
+        "properties": {
+          "bar_age_sessions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bar Age Sessions"
+          },
+          "event_age_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Age Days"
+          },
+          "last_bar_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Bar Date"
+          },
+          "newest_event_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newest Event At"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "last_bar_date",
+          "bar_age_sessions",
+          "newest_event_at",
+          "event_age_days",
+          "stale",
+          "notes"
+        ],
+        "title": "ResearchFreshness",
+        "type": "object"
+      },
+      "ResearchView": {
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "data_gaps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Data Gaps",
+            "type": "array"
+          },
+          "disclaimer": {
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "evaluation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchEvaluation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "horizon": {
+            "title": "Horizon",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "as_of",
+          "horizon",
+          "counts",
+          "candidates",
+          "evaluation",
+          "data_gaps",
+          "disclaimer"
+        ],
+        "title": "ResearchView",
+        "type": "object"
+      },
       "ResumeBody": {
         "additionalProperties": false,
         "properties": {
@@ -5308,6 +6375,185 @@
           }
         },
         "summary": "Report Markdown"
+      }
+    },
+    "/api/research/candidates": {
+      "get": {
+        "description": "The latest published research run, filtered.\n\nRead-only decision support: it serves what ``scripts/run_research.py`` published and can\nnever place, size or route an order. Every matching candidate is returned - there is no\ntop-N cut - and missing or unsupported inputs are reported in ``data_gaps``.",
+        "operationId": "research_candidates_api_research_candidates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(WATCH|SETUP_FORMING|CONFIRMED|INVALIDATED|NO_TRADE)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sector",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sector"
+            }
+          },
+          {
+            "in": "query",
+            "name": "asset",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(equity|index|sector|unsupported)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Asset"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-z_]{1,32}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_confidence",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min Confidence"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_uncertain",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Uncertain",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing or wrong token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "summary": "Research Candidates"
       }
     },
     "/api/risk": {

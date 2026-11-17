@@ -21,6 +21,7 @@ Entry points in `scripts/`, run from the repo root with `uv run python scripts/<
 | `nightly_review.py` | Nightly post-trade review (plan M8.7): role ``review`` writes structured lessons for each trade closed on the day; stored as ``TradeReview`` events, never fed back into any book in month 1. The engine already runs it after the daily report; use this to (re)run it for a day. |
 | `replay_day.py` | Replay a recorded day through the engine (plan M8.5): the day's tape, the reference snapshots cached for it, the announcements the live run stored, and cached LLM and decision-model responses (no network). Writes a fresh event store and the day's report. |
 | `run_live_trading.py` | RakshaQuant — main entry point. |
+| `run_research.py` | Event-aware market research: candidate cards with probabilistic forecasts and their evidence. |
 | `setup.py` | Guided one-command setup for RakshaQuant. |
 | `test_dhan_connection.py` | DhanHQ Connection Test |
 | `validate_strategy.py` | Validate strategies before risking capital (plan M11.2): backtest the paper engine itself over daily history (``src/backtesting/session.py``) and apply the edge gate (``src/backtesting/edge.py``): VALIDATED needs at least 200 closed trades **and** a 95% bootstrap CI of the mean net return per trade above zero. |

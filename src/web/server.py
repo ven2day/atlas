@@ -66,6 +66,7 @@ from src.web.models import (
     OrderRow,
     PositionRow,
     ReportSummary,
+    ResearchView,
     ResumeBody,
     RiskView,
     RoleModels,
@@ -120,6 +121,16 @@ Symbol = Annotated[str | None, Query(pattern=r"^[A-Z0-9&_.^-]{1,32}$")]
 Strategy = Annotated[str | None, Query(pattern=r"^[a-z_]{1,32}$")]
 Day = Annotated[date | None, Query(alias="date")]
 Limit = Annotated[int, Query(ge=1, le=MAX_ROWS)]
+# Research filters use closed vocabularies, so a typo is a 422 rather than an empty result that
+# silently looks like "no candidates matched".
+ResearchStatus = Annotated[
+    str | None,
+    Query(pattern=r"^(WATCH|SETUP_FORMING|CONFIRMED|INVALIDATED|NO_TRADE)$"),
+]
+ResearchAsset = Annotated[str | None, Query(pattern=r"^(equity|index|sector|unsupported)$")]
+EventType = Annotated[str | None, Query(pattern=r"^[a-z_]{1,32}$")]
+Sector = Annotated[str | None, Query(max_length=80)]
+Confidence = Annotated[float | None, Query(ge=0, le=1)]
 SYMBOL_PATH = r"^[A-Z0-9&_.^-]{1,32}$"
 DECISION_ID = r"^[A-Za-z0-9_-]{1,64}$"
 
@@ -382,6 +393,29 @@ def create_app(
         symbol: Symbol = None, day: Day = None, limit: Limit = 200
     ) -> list[TypedEventRow]:
         return await read(lambda q: q.typed_events(symbol=symbol, day=day, limit=limit))
+
+    @api.get("/research/candidates")
+    async def research_candidates(
+        status: ResearchStatus = None,
+        sector: Sector = None,
+        asset: ResearchAsset = None,
+        event_type: EventType = None,
+        min_confidence: Confidence = None,
+        include_uncertain: Annotated[bool, Query()] = True,
+        limit: Limit = 200,
+    ) -> ResearchView:
+        """The latest published research run, filtered.
+
+        Read-only decision support: it serves what ``scripts/run_research.py`` published and can
+        never place, size or route an order. Every matching candidate is returned - there is no
+        top-N cut - and missing or unsupported inputs are reported in ``data_gaps``.
+        """
+        return await read(
+            lambda q: q.research(
+                status=status, sector=sector, asset=asset, event_type=event_type,
+                min_confidence=min_confidence, include_uncertain=include_uncertain, limit=limit,
+            )
+        )  # fmt: skip
 
     @api.get("/reports/{day}")
     async def report(day: date) -> dict[str, Any]:

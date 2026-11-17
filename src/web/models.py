@@ -611,3 +611,157 @@ class CalibrationView(ApiModel):
     fitted: bool
     temperatures: dict[str, float]
     meta: dict[str, Any]
+
+
+# -- research (event-aware candidates; decision support, never orders) --------------------------
+#
+# These mirror the frozen dataclasses in src.research field for field, so a card persisted by
+# scripts/run_research.py round-trips through model_validate unchanged. Probabilities and log
+# returns are floats (statistics, not money); timestamps are timezone-aware.
+
+
+class ResearchEvidence(ApiModel):
+    field: str
+    value: str
+    note: str
+
+
+class ResearchCardEvent(ApiModel):
+    event_id: str
+    published_at: datetime
+    known_at: datetime
+    source: str
+    url: str | None
+    event_type: str | None
+    subject: str
+    excerpt: str
+    direction: str
+    materiality: str | None
+    channel: str
+    scope: str
+    confidence: float | None
+    basis: str
+    uncertain: bool
+    reason: str
+    evidence: list[ResearchEvidence]
+    updates: list[str]
+
+
+class ResearchContext(ApiModel):
+    instrument_key: str
+    bar_date: date | None
+    bars: int
+    regime: str | None
+    trend: str
+    close: float | None
+    rsi_14: float | None
+    adx_14: float | None
+    atr_pct: float | None
+    bb_percent: float | None
+    sigma_daily: float | None
+    annualized_vol: float | None
+    volume_ratio: float | None
+    adv20_inr: float | None
+    relative_strength: dict[str, float | None]
+    data_quality: str
+    notes: list[str]
+
+
+class ResearchForecast(ApiModel):
+    instrument_key: str
+    horizon_sessions: int
+    status: str  # ok | insufficient_evidence | unsupported_data
+    as_of: datetime
+    bar_date: date | None
+    regime: str | None
+    baseline: str  # regime_analogs | unconditional | none
+    p_up: float | None
+    p_side: float | None
+    p_down: float | None
+    q10: float | None
+    q50: float | None
+    q90: float | None
+    p_underperform_benchmark: float | None
+    sideways_band: float | None
+    n_samples: int
+    n_unconditional: int
+    trend: str | None
+    vol_band: str | None
+    annualized_vol: float | None
+    sigma_daily: float | None
+    data_quality: str
+    notes: list[str]
+
+
+class ResearchFreshness(ApiModel):
+    last_bar_date: date | None
+    bar_age_sessions: int | None
+    newest_event_at: datetime | None
+    event_age_days: float | None
+    stale: bool
+    notes: list[str]
+
+
+class ResearchCandidate(ApiModel):
+    instrument_key: str
+    symbol: str
+    company: str
+    sector: str | None
+    asset: str  # equity | index | sector | unsupported
+    horizon_sessions: int
+    status: str  # WATCH | SETUP_FORMING | CONFIRMED | INVALIDATED | NO_TRADE
+    as_of: datetime
+    events: list[ResearchCardEvent]
+    forecast: ResearchForecast | None
+    context: ResearchContext
+    confirmation: str  # confirms | disagrees | neutral | unknown
+    confirmation_reason: str
+    positive_factors: list[str]
+    negative_factors: list[str]
+    reasons: list[str]
+    confirm_if: list[str]
+    weaken_if: list[str]
+    invalidate_if: list[str]
+    unsupported: list[str]
+    freshness: ResearchFreshness
+
+
+class ResearchCalibrationCell(ApiModel):
+    bucket: str
+    n: int
+    predicted: float | None
+    realized: float | None
+
+
+class ResearchEventStudyCell(ApiModel):
+    event_type: str
+    direction: str
+    horizon_sessions: int
+    regime: str | None
+    n: int
+    mean_abnormal_return: float | None
+    median_abnormal_return: float | None
+    hit_rate: float | None
+    round_trip_cost_pct: float | None
+    mean_net_abnormal_return: float | None
+    notes: list[str]
+
+
+class ResearchEvaluation(ApiModel):
+    settled: int
+    brier: float | None
+    cells: list[ResearchCalibrationCell]
+    by_horizon: dict[str, list[ResearchCalibrationCell]]
+    by_regime: dict[str, list[ResearchCalibrationCell]]
+    study: list[ResearchEventStudyCell]
+    notes: list[str]
+
+
+class ResearchView(ApiModel):
+    as_of: datetime
+    horizon: int
+    counts: dict[str, int]
+    candidates: list[ResearchCandidate]
+    evaluation: ResearchEvaluation | None
+    data_gaps: list[str]
+    disclaimer: str
