@@ -284,3 +284,34 @@ def test_future_price_bars_do_not_change_historical_forecast() -> None:
     earlier = datetime(2026, 8, 3, 10, tzinfo=IST)
     trimmed = DailySeries(KEY, bars.frame.loc[bars.frame.index.date < earlier.date()])
     assert forecast(bars, as_of=earlier) == forecast(trimmed, as_of=earlier)
+
+
+def test_mature_event_study_and_published_forecast_settlement(tmp_path: Path) -> None:
+    from src.research.evaluation import calibration, settle_forecasts
+
+    bars = prices()
+    dates = bars.frame.index
+    impacts = [impact(f"historical-{i}") for i in range(8)]
+    known = {
+        item.event_id: datetime.combine(dates[5 + i * 10].date(), datetime.min.time(), IST)
+        for i, item in enumerate(impacts)
+    }
+    benchmark_frame = bars.frame.copy()
+    for column in ("open", "high", "low", "close"):
+        benchmark_frame[column] = 100 * np.exp(np.arange(len(dates)) * 0.001)
+    benchmark = DailySeries("benchmark", benchmark_frame)
+    cells = event_study(
+        impacts, {KEY: bars}, benchmark=benchmark, horizons=[5], known_at=known, cost_pct=0.001
+    )
+    assert len(cells) == 1 and cells[0].n == 8
+    assert cells[0].mean_abnormal_return == pytest.approx(0.005)
+    assert cells[0].mean_net_abnormal_return == pytest.approx(0.004)
+
+    published = forecast(bars, as_of=datetime(2026, 8, 3, 10, tzinfo=IST))
+    with ResearchStore(tmp_path / "research.db") as store:
+        store.save_forecasts([published])
+        assert settle_forecasts(store, {KEY: bars}, benchmark=benchmark, as_of=T0) == 1
+        assert settle_forecasts(store, {KEY: bars}, benchmark=benchmark, as_of=T0) == 0
+        report = calibration(store.settled_forecasts())
+        assert report.n == 1 and report.brier is not None
+        assert 0 <= report.brier <= 2
