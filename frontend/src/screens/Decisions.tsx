@@ -89,9 +89,10 @@ export default function Decisions() {
       <Panel
         title={`Decisions · ${count}`}
         description={`Session ${date ?? day}, sorted by time; click any row to open its inspector`}
-        bodyClassName="overflow-x-auto"
+        bodyClassName="overflow-hidden"
         className="min-h-[420px]"
       >
+        <div className="h-[60vh] min-h-[320px]">
         <DataTable
           label="Decisions"
           data={rows.data}
@@ -104,6 +105,7 @@ export default function Decisions() {
           empty="No decisions match these filters."
           emptyHint="Decisions run once a session, inside the entry window. Try another date, or clear the filters."
         />
+        </div>
       </Panel>
     </Page>
   );

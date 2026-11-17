@@ -135,7 +135,7 @@ async def test_with_a_running_engine_the_engines_own_switches_trip(settings, tmp
 class Idle(RunManager):
     """A run that only waits for its stop event (no market data, no network)."""
 
-    async def _run_real(self, view: Any) -> None:
+    async def _run(self, demo: bool) -> None:
         assert self._stop_event is not None
         await self._stop_event.wait()
 

@@ -15,8 +15,8 @@ from src.marketdata.dhan.auth import DhanAuth, DhanToken, read_token_file, write
 from src.marketdata.dhan.errors import DhanAuthError
 from src.marketdata.dhan.oauth import (
     Consent,
-    consume_consent,
     consent_login_url,
+    consume_consent,
     generate_consent,
     token_id_from_redirect,
 )
@@ -64,7 +64,7 @@ async def test_consume_consent_returns_the_token_and_its_expiry() -> None:
         {
             "GET /app/consumeApp-consent": (
                 200,
-                {"accessToken": "jwt.from.consent", "expiryTime": "2026-10-06 04:45:00"},
+                {"accessToken": "jwt.from.consent", "expiryTime": "2026-10-06T04:45:00Z"},
             )
         }
     )

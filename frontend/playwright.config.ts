@@ -16,6 +16,7 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     channel: process.env.PW_CHANNEL || undefined,
+    launchOptions: { executablePath: process.env.PW_EXECUTABLE_PATH || undefined },
     viewport: { width: 1600, height: 960 },
     colorScheme: "dark",
     timezoneId: "America/New_York", // the UI must show IST whatever the browser's zone

@@ -395,6 +395,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Research Candidates
+         * @description The latest published research run, filtered.
+         *
+         *     Read-only decision support: it serves what ``scripts/run_research.py`` published and can
+         *     never place, size or route an order. Every matching candidate is returned - there is no
+         *     top-N cut - and missing or unsupported inputs are reported in ``data_gaps``.
+         */
+        get: operations["research_candidates_api_research_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/risk": {
         parameters: {
             query?: never;
@@ -1285,6 +1309,289 @@ export interface components {
             date: string;
             /** Experiment */
             experiment: string;
+        };
+        /** ResearchCalibrationCell */
+        ResearchCalibrationCell: {
+            /** Bucket */
+            bucket: string;
+            /** N */
+            n: number;
+            /** Predicted */
+            predicted: number | null;
+            /** Realized */
+            realized: number | null;
+        };
+        /** ResearchCandidate */
+        ResearchCandidate: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Asset */
+            asset: string;
+            /** Company */
+            company: string;
+            /** Confirm If */
+            confirm_if: string[];
+            /** Confirmation */
+            confirmation: string;
+            /** Confirmation Reason */
+            confirmation_reason: string;
+            context: components["schemas"]["ResearchContext"];
+            /** Events */
+            events: components["schemas"]["ResearchCardEvent"][];
+            forecast: components["schemas"]["ResearchForecast"] | null;
+            freshness: components["schemas"]["ResearchFreshness"];
+            /** Horizon Sessions */
+            horizon_sessions: number;
+            /** Instrument Key */
+            instrument_key: string;
+            /** Invalidate If */
+            invalidate_if: string[];
+            /** Negative Factors */
+            negative_factors: string[];
+            /** Positive Factors */
+            positive_factors: string[];
+            /** Reasons */
+            reasons: string[];
+            /** Sector */
+            sector: string | null;
+            /** Status */
+            status: string;
+            /** Symbol */
+            symbol: string;
+            /** Unsupported */
+            unsupported: string[];
+            /** Weaken If */
+            weaken_if: string[];
+        };
+        /** ResearchCardEvent */
+        ResearchCardEvent: {
+            /** Basis */
+            basis: string;
+            /** Channel */
+            channel: string;
+            /** Confidence */
+            confidence: number | null;
+            /** Direction */
+            direction: string;
+            /** Event Id */
+            event_id: string;
+            /** Event Type */
+            event_type: string | null;
+            /** Evidence */
+            evidence: components["schemas"]["ResearchEvidence"][];
+            /** Excerpt */
+            excerpt: string;
+            /**
+             * Known At
+             * Format: date-time
+             */
+            known_at: string;
+            /** Materiality */
+            materiality: string | null;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Reason */
+            reason: string;
+            /** Scope */
+            scope: string;
+            /** Source */
+            source: string;
+            /** Subject */
+            subject: string;
+            /** Uncertain */
+            uncertain: boolean;
+            /** Updates */
+            updates: string[];
+            /** Url */
+            url: string | null;
+        };
+        /** ResearchContext */
+        ResearchContext: {
+            /** Adv20 Inr */
+            adv20_inr: number | null;
+            /** Adx 14 */
+            adx_14: number | null;
+            /** Annualized Vol */
+            annualized_vol: number | null;
+            /** Atr Pct */
+            atr_pct: number | null;
+            /** Bar Date */
+            bar_date: string | null;
+            /** Bars */
+            bars: number;
+            /** Bb Percent */
+            bb_percent: number | null;
+            /** Close */
+            close: number | null;
+            /** Data Quality */
+            data_quality: string;
+            /** Instrument Key */
+            instrument_key: string;
+            /** Notes */
+            notes: string[];
+            /** Regime */
+            regime: string | null;
+            /** Relative Strength */
+            relative_strength: {
+                [key: string]: number | null;
+            };
+            /** Rsi 14 */
+            rsi_14: number | null;
+            /** Sigma Daily */
+            sigma_daily: number | null;
+            /** Trend */
+            trend: string;
+            /** Volume Ratio */
+            volume_ratio: number | null;
+        };
+        /** ResearchEvaluation */
+        ResearchEvaluation: {
+            /** Brier */
+            brier: number | null;
+            /** By Horizon */
+            by_horizon: {
+                [key: string]: components["schemas"]["ResearchCalibrationCell"][];
+            };
+            /** By Regime */
+            by_regime: {
+                [key: string]: components["schemas"]["ResearchCalibrationCell"][];
+            };
+            /** Cells */
+            cells: components["schemas"]["ResearchCalibrationCell"][];
+            /** Notes */
+            notes: string[];
+            /** Settled */
+            settled: number;
+            /** Study */
+            study: components["schemas"]["ResearchEventStudyCell"][];
+        };
+        /** ResearchEventStudyCell */
+        ResearchEventStudyCell: {
+            /** Direction */
+            direction: string;
+            /** Event Type */
+            event_type: string;
+            /** Hit Rate */
+            hit_rate: number | null;
+            /** Horizon Sessions */
+            horizon_sessions: number;
+            /** Mean Abnormal Return */
+            mean_abnormal_return: number | null;
+            /** Mean Net Abnormal Return */
+            mean_net_abnormal_return: number | null;
+            /** Median Abnormal Return */
+            median_abnormal_return: number | null;
+            /** N */
+            n: number;
+            /** Notes */
+            notes: string[];
+            /** Regime */
+            regime: string | null;
+            /** Round Trip Cost Pct */
+            round_trip_cost_pct: number | null;
+        };
+        /** ResearchEvidence */
+        ResearchEvidence: {
+            /** Field */
+            field: string;
+            /** Note */
+            note: string;
+            /** Value */
+            value: string;
+        };
+        /** ResearchForecast */
+        ResearchForecast: {
+            /** Annualized Vol */
+            annualized_vol: number | null;
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Bar Date */
+            bar_date: string | null;
+            /** Baseline */
+            baseline: string;
+            /** Data Quality */
+            data_quality: string;
+            /** Horizon Sessions */
+            horizon_sessions: number;
+            /** Instrument Key */
+            instrument_key: string;
+            /** N Samples */
+            n_samples: number;
+            /** N Unconditional */
+            n_unconditional: number;
+            /** Notes */
+            notes: string[];
+            /** P Down */
+            p_down: number | null;
+            /** P Side */
+            p_side: number | null;
+            /** P Underperform Benchmark */
+            p_underperform_benchmark: number | null;
+            /** P Up */
+            p_up: number | null;
+            /** Q10 */
+            q10: number | null;
+            /** Q50 */
+            q50: number | null;
+            /** Q90 */
+            q90: number | null;
+            /** Regime */
+            regime: string | null;
+            /** Sideways Band */
+            sideways_band: number | null;
+            /** Sigma Daily */
+            sigma_daily: number | null;
+            /** Status */
+            status: string;
+            /** Trend */
+            trend: string | null;
+            /** Vol Band */
+            vol_band: string | null;
+        };
+        /** ResearchFreshness */
+        ResearchFreshness: {
+            /** Bar Age Sessions */
+            bar_age_sessions: number | null;
+            /** Event Age Days */
+            event_age_days: number | null;
+            /** Last Bar Date */
+            last_bar_date: string | null;
+            /** Newest Event At */
+            newest_event_at: string | null;
+            /** Notes */
+            notes: string[];
+            /** Stale */
+            stale: boolean;
+        };
+        /** ResearchView */
+        ResearchView: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Candidates */
+            candidates: components["schemas"]["ResearchCandidate"][];
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Data Gaps */
+            data_gaps: string[];
+            /** Disclaimer */
+            disclaimer: string;
+            evaluation: components["schemas"]["ResearchEvaluation"] | null;
+            /** Horizon */
+            horizon: number;
         };
         /** ResumeBody */
         ResumeBody: {
@@ -3105,6 +3412,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Document"];
+                };
+            };
+            /** @description Missing or wrong token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    research_candidates_api_research_candidates_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                sector?: string | null;
+                asset?: string | null;
+                event_type?: string | null;
+                min_confidence?: number | null;
+                include_uncertain?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchView"];
                 };
             };
             /** @description Missing or wrong token */

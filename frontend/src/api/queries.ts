@@ -26,6 +26,7 @@ export const keys = {
   bars: (symbol: string, days: number, adjusted = true) => ["bars", symbol, days, adjusted] as const,
   typed: (q: Query) => ["typed", q] as const,
   report: (day: string) => ["report", day] as const,
+  research: (q: Query) => ["research", q] as const,
 };
 
 /** Which projections each stream topic can change. */
