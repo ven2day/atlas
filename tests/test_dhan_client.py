@@ -81,7 +81,7 @@ def client_for(
 
 async def test_quotes_are_batched_by_segment_and_normalised() -> None:
     dhan, recorder = client_for({"POST /v2/marketfeed/quote": (200, QUOTE_BODY)})
-    out = await dhan.quotes(["1333", "1333"])
+    out = await dhan.quotes({"NSE_EQ": ["1333", "1333"]})
     request = recorder.requests[0]
     assert json.loads(request.content) == {"NSE_EQ": [1333]}
     assert request.headers["access-token"] == "static-token"

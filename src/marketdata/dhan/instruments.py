@@ -73,7 +73,9 @@ def mapping_for(
     return DhanMapping(EXCHANGE_SEGMENT, INSTRUMENT_TYPE, sid) if sid else None
 
 
-def security_id(instrument: Instrument, overrides: Mapping[str, DhanMapping] | None = None) -> str | None:
+def security_id(
+    instrument: Instrument, overrides: Mapping[str, DhanMapping] | None = None
+) -> str | None:
     """Dhan's security id for an instrument, or None when nothing maps it."""
     mapping = mapping_for(instrument, overrides)
     return mapping.security_id if mapping is not None else None

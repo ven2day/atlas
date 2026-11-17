@@ -25,6 +25,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from pydantic import ValidationError
+
 from src.config.limits import RiskLimits, load_risk_limits
 from src.decision_models.calibration import CalibrationMap
 from src.domain.calendar import CalendarCoverageError, NSECalendar, get_calendar
@@ -64,6 +66,7 @@ from src.llm.prompts import templates
 from src.llm.registry import role_configs
 from src.oms.exit_manager import ManagedPosition
 from src.ops.logging_config import redact
+from src.research.snapshot import DISCLAIMER, load_snapshot
 from src.risk.events import EventBlock, EventRules, event_blocks
 from src.risk.snapshot import RiskSnapshot
 from src.risk.utilisation import Usage, sector_usage, utilisation
@@ -102,6 +105,9 @@ from src.web.models import (
     ReconcileRow,
     ReportBook,
     ReportSummary,
+    ResearchCandidate,
+    ResearchEvaluation,
+    ResearchView,
     RiskView,
     RoleModels,
     ScheduleStep,
@@ -790,6 +796,98 @@ class Queries:
             if len(out) >= limit:
                 break
         return out
+
+    # -- research (event-aware candidates) ----------------------------------------------------
+
+    # Presentation order only. It is not a ranking of merit, and every matching candidate is
+    # returned: truncating to a "top few" would hide exactly the weak-evidence cases worth seeing.
+    _RESEARCH_ORDER = ("CONFIRMED", "SETUP_FORMING", "WATCH", "INVALIDATED", "NO_TRADE")
+
+    def research(
+        self,
+        *,
+        status: str | None = None,
+        sector: str | None = None,
+        asset: str | None = None,
+        event_type: str | None = None,
+        min_confidence: float | None = None,
+        include_uncertain: bool = True,
+        limit: int = 500,
+    ) -> ResearchView:
+        """The latest published research run, filtered.
+
+        Reads only the snapshot ``scripts/run_research.py`` writes: no prices are fetched, no
+        network is touched, and nothing here can place an order. Before the first run the view is
+        empty and says so in ``data_gaps`` rather than pretending there are no candidates.
+        """
+        raw = load_snapshot(self.reports_dir)
+        if raw is None:
+            return ResearchView(
+                as_of=self.clock.now(), horizon=0, counts={}, candidates=[], evaluation=None,
+                data_gaps=["no research run has been published yet: run scripts/run_research.py"],
+                disclaimer=DISCLAIMER,
+            )  # fmt: skip
+        stamp = raw.get("as_of")
+        as_of = _dt(str(stamp)) if isinstance(stamp, str) and stamp else self.clock.now()
+        try:
+            horizon = int(raw.get("horizon") or 0)
+        except (TypeError, ValueError):
+            horizon = 0
+
+        candidates: list[ResearchCandidate] = []
+        for payload in raw.get("candidates") or []:
+            try:
+                card = ResearchCandidate.model_validate(payload)
+            except ValidationError as exc:
+                logger.warning("skipping an unreadable research candidate: %s", exc)
+                continue
+            if status is not None and card.status != status:
+                continue
+            if sector is not None and (card.sector or "") != sector:
+                continue
+            if asset is not None and card.asset != asset:
+                continue
+            if event_type is not None and not any(e.event_type == event_type for e in card.events):
+                continue
+            confidences = [e.confidence for e in card.events if e.confidence is not None]
+            weakest = min(confidences) if confidences else None
+            if min_confidence is not None and (weakest is None or weakest < min_confidence):
+                continue
+            if not include_uncertain and any(e.uncertain for e in card.events):
+                continue
+            candidates.append(card)
+
+        rank = {name: index for index, name in enumerate(self._RESEARCH_ORDER)}
+        candidates.sort(key=lambda c: (rank.get(c.status, 99), c.symbol, c.instrument_key))
+        counts: dict[str, int] = {}
+        for card in candidates:
+            counts[card.status] = counts.get(card.status, 0) + 1
+        gaps = [str(g) for g in (raw.get("data_gaps") or [])]
+        if len(candidates) > limit:
+            gaps.append(
+                f"{len(candidates)} candidates matched; only the first {limit} are returned, "
+                "narrow the filters to see the rest"
+            )
+        return ResearchView(
+            as_of=as_of,
+            horizon=horizon,
+            counts=counts,
+            candidates=candidates[:limit],
+            evaluation=self._research_evaluation(raw.get("evaluation")),
+            data_gaps=gaps,
+            disclaimer=str(raw.get("disclaimer") or DISCLAIMER),
+        )
+
+    @staticmethod
+    def _research_evaluation(raw: Any) -> ResearchEvaluation | None:
+        """The run's calibration and event study, or None if the snapshot has neither."""
+        if not isinstance(raw, dict):
+            return None
+        try:
+            return ResearchEvaluation.model_validate(raw)
+        except ValidationError as exc:
+            logger.warning("the research snapshot's evaluation block is unreadable: %s", exc)
+            return None
 
     def tape_bars(self, instrument_key: str, *, adjusted: bool) -> list[Bar]:
         """The instrument's daily bars from the newest taped history (no engine running)."""

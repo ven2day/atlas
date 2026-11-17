@@ -89,10 +89,11 @@ export default function Decisions() {
       <Panel
         title={`Decisions · ${count}`}
         description={`Session ${date ?? day}, sorted by time; click any row to open its inspector`}
-        bodyClassName="overflow-x-auto"
+        bodyClassName="overflow-hidden"
         className="min-h-[420px]"
       >
         <DataTable
+          className="h-[60vh] min-h-[320px]"
           label="Decisions"
           data={rows.data}
           columns={DECISION_COLUMNS}

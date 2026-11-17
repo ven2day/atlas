@@ -25,8 +25,8 @@ from src.config import get_settings
 from src.config.errors import ConfigError
 from src.marketdata.dhan.auth import write_token_file
 from src.marketdata.dhan.oauth import (
-    consume_consent,
     consent_login_url,
+    consume_consent,
     generate_consent,
     token_id_from_redirect,
 )
