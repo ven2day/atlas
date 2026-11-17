@@ -221,6 +221,8 @@ class DhanAuth:
         return await self._generate_with_totp(now)
 
     async def _generate_with_totp(self, now: datetime) -> DhanToken:
+        if self._totp_secret is None:
+            raise DhanAuthError("Dhan TOTP secret is not configured")
         code = totp_code(self._totp_secret, at=now.timestamp())
         client = self._client if self._client is not None else httpx2.AsyncClient(timeout=20.0)
         try:

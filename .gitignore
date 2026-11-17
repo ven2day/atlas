@@ -64,3 +64,6 @@ Thumbs.db
 # Local scratch, not project sources
 AgentContext/
 .tmp-ui-shots/
+
+# Local coding-assistant scratch state
+.qwen/

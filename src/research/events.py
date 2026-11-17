@@ -6,7 +6,7 @@ The announcement pipeline already does the ingestion and the classification: an
 It joins the two into one ``ResearchEvent`` and adds the three things a decision-support path
 needs that the trading gate does not:
 
-* **``known_at``** = ``max(published_at, received_at)``. A run timestamped ``as_of`` sees only
+* **``known_at``** includes publication, receipt and classification availability. A run timestamped ``as_of`` sees only
   events with ``known_at <= as_of``, so a late-published or future-dated story can never leak
   into an earlier decision. This is the look-ahead guard for research and evaluation alike.
 * **Supersession instead of silent deduplication.** The feed's own repeats are already
@@ -87,7 +87,7 @@ class ResearchEvent:
     published_at: datetime  # the exchange's own timestamp (aware)
     ingested_at: datetime | None  # when we received it (aware); None if unclassified-only
     event_time: datetime | None  # when the underlying event happens, if it is scheduled
-    known_at: datetime  # max(published_at, ingested_at): usable from here on
+    known_at: datetime  # includes classification availability when classified
     event_type: AnnouncementType | None
     subject: str
     text: str  # the original text, so a claim is always traceable
@@ -196,11 +196,15 @@ def research_events(
     for event in store.read(types=["TypedEvent"]):
         payload = event.payload
         if isinstance(payload, TypedEvent):
+            if as_of is not None and max(event.ts_utc, payload.classified_at) > as_of:
+                continue
             typed_by_id[payload.event_id] = payload
     received_by_id: dict[str, AnnouncementReceived] = {}
     for event in store.read(types=["AnnouncementReceived"]):
         payload = event.payload
         if isinstance(payload, AnnouncementReceived):
+            if as_of is not None and event.ts_utc > as_of:
+                continue
             received_by_id[payload.announcement_id] = payload
 
     ids = set(typed_by_id) | set(received_by_id)
@@ -220,6 +224,8 @@ def research_events(
             else (typed.classified_at if typed is not None else None)
         )
         known = published if ingested is None else max(published, ingested)
+        if typed is not None:
+            known = max(known, typed.classified_at)
         if as_of is not None and known > as_of:
             continue  # not knowable yet: the point-in-time guard
         subject = _subject_of(announcement, typed)
@@ -258,7 +264,7 @@ def research_events(
 
 
 def _mark_superseded(events: Iterable[ResearchEvent]) -> list[ResearchEvent]:
-    """Record corrections and same-day re-issues: the later event names the ids it updates."""
+    """Record only explicit linked corrections; same-day independent news stays current."""
     ordered = sorted(events, key=lambda e: (e.known_at, e.event_id))
     by_group: dict[tuple[str | None, str], list[ResearchEvent]] = defaultdict(list)
     updates: dict[str, list[str]] = defaultdict(list)
@@ -266,14 +272,16 @@ def _mark_superseded(events: Iterable[ResearchEvent]) -> list[ResearchEvent]:
     for event in ordered:
         group_key = (event.instrument_key, event.event_type.value if event.event_type else "")
         prior = by_group[group_key]
-        if prior:
-            last = prior[-1]
-            same_day = last.known_at.astimezone(IST).date() == event.known_at.astimezone(IST).date()
+        for last in reversed(prior):
             says_correction = any(word in event.text.lower() for word in _CORRECTION_WORDS)
             within_window = (event.known_at - last.known_at).days <= CORRECTION_WINDOW_DAYS
-            if same_day or (says_correction and within_window):
+            linked = last.event_id in event.text or (
+                bool(last.source_url) and last.source_url == event.source_url
+            )
+            if says_correction and within_window and linked:
                 updates[event.event_id].append(last.event_id)
                 replaced[last.event_id] = event.event_id
+                break
         by_group[group_key].append(event)
     if not replaced:
         return ordered

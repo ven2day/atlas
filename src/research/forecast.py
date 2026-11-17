@@ -39,6 +39,9 @@ import pandas as pd
 
 from src.domain.types import Regime
 from src.marketdata.history import DailySeries
+from src.research.events import ResearchEvent
+from src.research.timing import first_close_after
+from src.utils.market_time import IST
 
 HORIZONS: tuple[int, ...] = (1, 5, 10, 20)  # trading sessions
 DEFAULT_HORIZON = 5
@@ -165,6 +168,8 @@ def forecast(
     benchmark: DailySeries | None = None,
     min_analog_samples: int = MIN_ANALOG_SAMPLES,
     min_unconditional_samples: int = MIN_UNCONDITIONAL_SAMPLES,
+    catalyst: ResearchEvent | None = None,
+    historical_events: Sequence[ResearchEvent] = (),
 ) -> Forecast:
     """The forward-return distribution for ``series`` over ``horizon`` sessions.
 
@@ -173,6 +178,8 @@ def forecast(
     """
     if horizon not in HORIZONS:
         raise ValueError(f"horizon must be one of {HORIZONS}, got {horizon}")
+    if as_of.tzinfo is None:
+        raise ValueError("as_of must be timezone-aware")
     if series.source.is_fabricated:
         return _empty(
             series, horizon=horizon, as_of=as_of, regime=regime,
@@ -181,6 +188,19 @@ def forecast(
             notes=("refusing to forecast on simulated or synthetic prices",),
         )  # fmt: skip
 
+    # Match the daily history contract even when callers supply an untrimmed series.
+    cutoff = as_of.astimezone(IST).date()
+    raw_frame = series.frame.loc[pd.to_datetime(series.frame.index).date < cutoff]
+    series = DailySeries(series.instrument_key, raw_frame, series.source)
+    if raw_frame.empty:
+        return _empty(
+            series,
+            horizon=horizon,
+            as_of=as_of,
+            regime=regime,
+            status=ForecastStatus.INSUFFICIENT_EVIDENCE,
+            data_quality="no settled bars before as_of",
+        )
     frame = series.adjusted()
     close = frame["close"].astype(float)
     bars = int(len(close))
@@ -229,6 +249,22 @@ def forecast(
         if current_trend == "?" or current_band == "?":
             notes.append("the trailing state is not yet determined; using the unconditional base")
 
+    if catalyst is not None:
+        event_returns = _event_returns(close, historical_events, catalyst, horizon, as_of)
+        if len(event_returns) >= min_analog_samples:
+            returns, baseline = event_returns, "event_analogs"
+            notes.append(
+                f"event-conditioned on issuer, type, direction and materiality; "
+                f"catalyst={catalyst.event_id}; non-overlapping outcomes only"
+            )
+        else:
+            notes.append(
+                f"only {len(event_returns)} settled, non-overlapping matching events; "
+                f"using technical baseline={baseline}, not an event-conditioned probability"
+            )
+    else:
+        notes.append("technical baseline only: no catalyst supplied for event conditioning")
+
     if current_sigma is None or current_sigma <= 0:
         sideways = None
         notes.append("no daily sigma: the sideways band is undefined, so p_up/p_down are not set")
@@ -243,7 +279,14 @@ def forecast(
         p_side = float(1.0 - p_up - p_down)
     q10, q50, q90 = _quantiles(returns)
 
-    p_under = _underperformance(series, benchmark, horizon, fwd, analog_mask, notes)
+    # Event and technical cohorts must not be mixed in a benchmark probability.
+    p_under = (
+        None
+        if baseline == "event_analogs"
+        else _underperformance(series, benchmark, horizon, fwd, analog_mask, notes)
+    )
+    if baseline == "event_analogs":
+        notes.append("event-conditioned benchmark underperformance is not yet estimated")
 
     return Forecast(
         instrument_key=series.instrument_key,
@@ -272,6 +315,45 @@ def forecast(
     )
 
 
+def _event_returns(
+    close: pd.Series,
+    events: Sequence[ResearchEvent],
+    catalyst: ResearchEvent,
+    horizon: int,
+    as_of: datetime,
+) -> np.ndarray:
+    """Prior matching issuer events whose complete outcome was known at publication.
+
+    Matching uses the historical classification version provided by the point-in-time reader.
+    Returns are close-to-close reactions, not assumed executable trade returns.
+    """
+    dates = list(pd.to_datetime(close.index).date)
+    values: list[float] = []
+    last_end = -1
+    if catalyst.known_at > as_of or catalyst.event_type is None or catalyst.direction is None:
+        return np.asarray(values, dtype=float)
+    for event in sorted(events, key=lambda e: (e.known_at, e.event_id)):
+        if (
+            event.event_id == catalyst.event_id
+            or event.instrument_key != catalyst.instrument_key
+            or event.event_type != catalyst.event_type
+            or event.direction != catalyst.direction
+            or event.materiality != catalyst.materiality
+            or event.known_at >= min(catalyst.known_at, as_of)
+            or event.relevant is not True
+        ):
+            continue
+        start = first_close_after(dates, event.known_at)
+        if start is None or start <= last_end or start + horizon >= len(close):
+            continue
+        end = start + horizon
+        first, last = float(close.iloc[start]), float(close.iloc[end])
+        if first > 0 and last > 0 and math.isfinite(first) and math.isfinite(last):
+            values.append(math.log(last / first))
+            last_end = end
+    return np.asarray(values, dtype=float)
+
+
 def _underperformance(
     series: DailySeries,
     benchmark: DailySeries | None,
@@ -289,7 +371,7 @@ def _underperformance(
             "the benchmark series is synthetic: relative underperformance is not estimated"
         )
         return None
-    bench_close = benchmark.adjusted()["close"].astype(float)
+    bench_close = benchmark.adjusted()["close"].astype(float).reindex(series.frame.index)
     bench_fwd = _forward_returns(bench_close, horizon)
     pair = pd.concat([fwd.rename("r"), bench_fwd.rename("b")], axis=1, join="inner").dropna()
     if len(pair) < MIN_ANALOG_SAMPLES:

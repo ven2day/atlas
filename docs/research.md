@@ -55,11 +55,12 @@ Joins the two records the engine already writes: `AnnouncementReceived` (the exc
 `published_at` and our `received_at`) and `TypedEvent` (its classification). Adds three things the
 trading gate does not need but research does:
 
-- **`known_at = max(published_at, received_at)`.** A run timestamped `as_of` sees only events with
+- **`known_at = max(published_at, received_at, classified_at)` for classified events.** A run timestamped `as_of` sees only events with
   `known_at <= as_of`. A late-published or future-dated story can never leak into an earlier
   decision. This single field is what makes the evaluation in §6 honest.
-- **Supersession, not silent dedup.** A correction or same-day re-issue records the ids it
-  `updates`, and the superseded event is dropped from cards but stays in the store.
+- **Supersession, not silent dedup.** An explicit correction must link to the earlier event ID
+  or reuse its nonempty source URL. Same-day announcements remain independent. The original
+  stays in the store; classification versions are filtered by their availability timestamps.
 - **An explicit asset class**, including `UNSUPPORTED` for anything with no configured source.
 
 `source_confidence` (do we trust NSE's feed?) is kept apart from `classification_confidence` (do
@@ -95,7 +96,14 @@ authorized macro source. `ImpactScope.MARKET` exists so one can be added later.
 
 ### 3. Forecasts (`forecast.py`)
 
-Purely empirical. For each historical bar, compute the forward log return over `h` sessions, and
+Purely empirical. The event-conditioned cohort matches prior events for the same issuer, type,
+direction and materiality. It requires at least 20 complete, non-overlapping outcomes and reports
+`baseline="event_analogs"`. The anchor is the first session close after the classification became
+known; this measures a close-to-close reaction, not an executable trade return. Event-conditioned
+benchmark underperformance is currently unavailable and explicitly reported as such.
+
+When this cohort is too small, the card explicitly falls back to a technical baseline.
+For each historical bar, compute the forward log return over `h` sessions, and
 keep the bars whose trailing state resembles today's:
 
 - **trend** — close above/below its own 50-session mean;
@@ -112,9 +120,10 @@ comparable across horizons.
 
 Fallbacks, in order, each recorded on the card:
 
-1. fewer than 20 analogs in the current state → use all forward returns (`baseline="unconditional"`) and say so;
-2. fewer than 40 usable forward returns in total → `INSUFFICIENT_EVIDENCE`, no numbers at all;
-3. a simulated or synthetic price source → `UNSUPPORTED_DATA`, refused outright.
+1. fewer than 20 matching event outcomes → use the technical baseline and explicitly label it;
+2. fewer than 20 analogs in the current state → use all forward returns (`baseline="unconditional"`) and say so;
+3. fewer than 40 usable forward returns in total → `INSUFFICIENT_EVIDENCE`, no numbers at all;
+4. a simulated or synthetic price source → `UNSUPPORTED_DATA`, refused outright.
 
 No model is ever asked for a number. Laya and Jev classify text; the arithmetic is NumPy.
 
@@ -170,6 +179,14 @@ never touches them (the same rule as `kv_state`).
 write path to `EventStore`. WAL with the shared busy timeout allows it, and it means the research
 layer cannot append, project or rebuild events — and a crash in it cannot take the engine's store
 connection with it.
+
+Published forecasts are immutable. The identity includes the full UTC publication timestamp;
+an exact retry leaves the publication unchanged. A later publication gets a new identity.
+Legacy forecast rows remain preserved. New timestamps use explicit UTC, and card recency
+comparisons parse offsets so existing rows remain readable.
+
+A `CONFIRMED` status requires known relative strength and non-uncertain catalyst evidence.
+Opposing active issuer catalysts produce `WATCH`.
 
 Each run also writes `var/reports/research_latest.json`, the snapshot the console serves. That
 file carries the event study and the data-gap list, which are computed live and have no table.

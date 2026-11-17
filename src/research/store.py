@@ -22,7 +22,7 @@ import json
 import sqlite3
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, is_dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +41,9 @@ FORECAST_COLUMNS = (
 
 
 def _utc(moment: datetime) -> str:
-    return moment.astimezone().isoformat() if moment.tzinfo else moment.isoformat()
+    if moment.tzinfo is None:
+        raise ValueError("research timestamps must be timezone-aware")
+    return moment.astimezone(UTC).isoformat(timespec="microseconds")
 
 
 def _json_default(value: Any) -> Any:
@@ -62,7 +64,7 @@ def forecast_id(prediction: Forecast) -> str:
     raw = (
         f"{prediction.instrument_key}|{prediction.horizon_sessions}|"
         f"{prediction.bar_date.isoformat() if prediction.bar_date else ''}|"
-        f"{prediction.as_of.date().isoformat()}"
+        f"{_utc(prediction.as_of)}"
     )
     return hashlib.sha256(raw.encode()).hexdigest()[:24]
 
@@ -102,12 +104,11 @@ class ResearchStore:
         return len(statements)
 
     def save_forecasts(self, predictions: Iterable[Forecast]) -> int:
-        """Upsert published forecasts. Re-publishing the same bar overwrites, never duplicates."""
+        """Immutable publications; retrying the same publication leaves it unchanged."""
         sql = (
             f"INSERT INTO research_forecasts ({','.join(FORECAST_COLUMNS)}) "
             f"VALUES ({','.join('?' * len(FORECAST_COLUMNS))}) "
-            f"ON CONFLICT(forecast_id) DO UPDATE SET "
-            + ",".join(f"{c}=excluded.{c}" for c in FORECAST_COLUMNS if c != "forecast_id")
+            "ON CONFLICT(forecast_id) DO NOTHING"
         )
         return self._write([(sql, _forecast_row(p)) for p in predictions])
 
@@ -185,7 +186,7 @@ class ResearchStore:
 
     def latest_cards(self, *, horizon: int | None = None, limit: int = 500) -> list[dict[str, Any]]:
         """The most recently published card per instrument, for the console's default view."""
-        clauses = ["as_of_utc = (SELECT MAX(as_of_utc) FROM research_cards c2"
+        clauses = ["julianday(as_of_utc) = (SELECT MAX(julianday(as_of_utc)) FROM research_cards c2"
                    " WHERE c2.instrument_key = research_cards.instrument_key"
                    " AND c2.horizon_sessions = research_cards.horizon_sessions)"]  # fmt: skip
         params: list[Any] = []
@@ -202,7 +203,8 @@ class ResearchStore:
         """Published forecasts whose horizon has not been scored yet."""
         return self.query(
             "SELECT * FROM research_forecasts WHERE outcome_settled_at IS NULL"
-            " ORDER BY as_of_utc LIMIT ?",
+            " AND status = 'ok' AND bar_date IS NOT NULL"
+            " ORDER BY julianday(as_of_utc) LIMIT ?",
             (limit,),
         )
 
@@ -220,7 +222,7 @@ class ResearchStore:
         params.append(limit)
         return self.query(
             f"SELECT * FROM research_forecasts WHERE {' AND '.join(clauses)}"
-            " ORDER BY as_of_utc LIMIT ?",
+            " ORDER BY julianday(as_of_utc) LIMIT ?",
             params,
         )
 
