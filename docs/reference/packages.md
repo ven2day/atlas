@@ -85,6 +85,15 @@ graph LR
   ops --> utils
   reference --> config
   reference --> domain
+  research --> brokers
+  research --> config
+  research --> domain
+  research --> engine
+  research --> features
+  research --> marketdata
+  research --> reference
+  research --> store
+  research --> utils
   risk --> brokers
   risk --> config
   risk --> domain
@@ -106,6 +115,7 @@ graph LR
   web --> llm
   web --> oms
   web --> ops
+  web --> research
   web --> risk
   web --> store
   web --> utils
@@ -343,6 +353,25 @@ Imports: `config`, `domain`.
 | `reference/refresh.py` | The pre-open reference refresh (plan M2.4/M2.5): universe, instrument master and price bands. |
 | `reference/universe.py` | The trading universe (plan D13, M2.4): the NIFTY 50 constituents as of a snapshot date. |
 
+## `src/research`
+
+Explainable, event-aware market research (decision support, never order placement).
+
+Imports: `brokers`, `config`, `domain`, `engine`, `features`, `marketdata`, `reference`, `store`, `utils`.
+
+| Module | Purpose |
+| --- | --- |
+| `research/cards.py` | Recommendation cards: the explainable unit the research UI shows. |
+| `research/context.py` | Market context, kept separate from the event thesis. |
+| `research/evaluation.py` | Event studies and forecast calibration, both strictly point in time. |
+| `research/events.py` | Normalized, point-in-time research events. |
+| `research/forecast.py` | Horizon-specific probabilistic forecasts from historical analogs. |
+| `research/mapping.py` | Event-to-asset mapping: which instruments, sectors and assets an event can reach, and how. |
+| `research/pipeline.py` | One research run: from the event store to persisted, explainable candidate cards. |
+| `research/snapshot.py` | The research run's published snapshot: one JSON file the console reads. |
+| `research/status.py` | Candidate status: WATCH, SETUP_FORMING, CONFIRMED, INVALIDATED, NO_TRADE. |
+| `research/store.py` | Durable state for the research layer, in the environment's own SQLite database. |
+
 ## `src/risk`
 
 Deterministic risk guards (drawdown tracking + NSE circuit-limit detection).
@@ -412,7 +441,7 @@ Imports: `domain`.
 
 Web console for RakshaQuant - the browser front end (``--mode web``).
 
-Imports: `config`, `decision_models`, `domain`, `engine`, `evaluation`, `llm`, `oms`, `ops`, `risk`, `store`, `utils`.
+Imports: `config`, `decision_models`, `domain`, `engine`, `evaluation`, `llm`, `oms`, `ops`, `research`, `risk`, `store`, `utils`.
 
 | Module | Purpose |
 | --- | --- |
