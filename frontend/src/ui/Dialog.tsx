@@ -1,10 +1,12 @@
-// Radix dialogs with a focus trap (§6.4), and ConfirmTyped: a destructive control that only
-// arms once the operator has typed the exact phrase (RESUME, FLATTEN) and given a reason.
+// Radix dialogs with a focus trap, and ConfirmTyped: a destructive control that only arms once
+// the operator has typed the exact phrase (RESUME, FLATTEN) and given a reason.
 
 import * as RadixDialog from "@radix-ui/react-dialog";
 import { useId, useState, type ReactNode } from "react";
 
-import { ToolButton } from "./Panel";
+import { cx } from "../lib/cx";
+import { Button } from "./Button";
+import { TextInput } from "./Input";
 
 export function Dialog({
   open,
@@ -12,6 +14,7 @@ export function Dialog({
   title,
   description,
   children,
+  footer,
   wide = false,
 }: {
   open: boolean;
@@ -19,29 +22,50 @@ export function Dialog({
   title: string;
   description?: ReactNode;
   children: ReactNode;
+  footer?: ReactNode;
   wide?: boolean;
 }) {
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 bg-overlay" />
+        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-overlay animate-fade-in" />
         <RadixDialog.Content
-          className={`fixed left-1/2 -translate-x-1/2 rounded border border-line-strong bg-bg-1 p-4 shadow-popover ${
-            wide ? "top-[6%] flex max-h-[88vh] w-[920px] max-w-[94vw] flex-col" : "top-[20%] w-[440px] max-w-[92vw]"
-          }`}
+          className={cx(
+            "fixed left-1/2 z-50 -translate-x-1/2 rounded-xl border border-line-strong bg-bg-1 shadow-popover animate-rise-in",
+            wide
+              ? "top-[5%] flex max-h-[90vh] w-[960px] max-w-[94vw] flex-col"
+              : "top-[16%] w-[460px] max-w-[92vw]",
+          )}
         >
-          <RadixDialog.Title className="text-sm font-medium text-fg-0">{title}</RadixDialog.Title>
-          <RadixDialog.Description className="mt-1 text-xs text-fg-1">
-            {description ?? " "}
-          </RadixDialog.Description>
-          <div className={wide ? "mt-3 min-h-0 flex-1 overflow-auto" : "mt-3"}>{children}</div>
+          <div className="flex shrink-0 items-start justify-between gap-4 px-5 pb-3 pt-5">
+            <div className="min-w-0">
+              <RadixDialog.Title className="text-lg font-semibold tracking-tight text-fg-0">
+                {title}
+              </RadixDialog.Title>
+              <RadixDialog.Description className="mt-1.5 text-sm leading-relaxed text-fg-1">
+                {description ?? " "}
+              </RadixDialog.Description>
+            </div>
+            <RadixDialog.Close
+              aria-label="Close"
+              className="-mr-1 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-fg-2 transition-colors duration-150 hover:bg-bg-2 hover:text-fg-0"
+            >
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M2 2l10 10M12 2 2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </RadixDialog.Close>
+          </div>
+          <div className={wide ? "min-h-0 flex-1 overflow-auto px-5 pb-5" : "px-5 pb-5"}>{children}</div>
+          {footer && (
+            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-5 py-3.5">
+              {footer}
+            </div>
+          )}
         </RadixDialog.Content>
       </RadixDialog.Portal>
     </RadixDialog.Root>
   );
 }
-
-const field = "h-7 w-full rounded-sm border border-line-strong bg-bg-0 px-2 text-sm text-fg-0";
 
 export function ConfirmTyped({
   open,
@@ -65,8 +89,7 @@ export function ConfirmTyped({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const phraseId = useId();
-  const reasonId = useId();
+  const ids = useId();
   const armed = typed === phrase && reason.trim().length >= 3 && !busy;
 
   const close = (next: boolean) => {
@@ -99,33 +122,39 @@ export function ConfirmTyped({
           e.preventDefault();
           void submit();
         }}
-        className="flex flex-col gap-2"
+        className="flex flex-col gap-4"
       >
-        <label htmlFor={reasonId} className="text-2xs text-fg-2">
-          Reason (recorded with the action)
-        </label>
-        <input id={reasonId} className={field} value={reason} onChange={(e) => setReason(e.target.value)} />
-        <label htmlFor={phraseId} className="text-2xs text-fg-2">
-          Type <span className="font-mono text-fg-0">{phrase}</span> to confirm
-        </label>
-        <input
-          id={phraseId}
-          className={`${field} font-mono`}
-          value={typed}
-          autoComplete="off"
-          spellCheck={false}
-          onChange={(e) => setTyped(e.target.value)}
-        />
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`${ids}-reason`} className="rq-label">
+            Reason (recorded with the action)
+          </label>
+          <TextInput id={`${ids}-reason`} value={reason} onChange={(e) => setReason(e.target.value)} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`${ids}-phrase`} className="rq-label">
+            Type <span className="font-mono normal-case tracking-normal text-fg-0">{phrase}</span> to confirm
+          </label>
+          <TextInput
+            id={`${ids}-phrase`}
+            className="font-mono"
+            value={typed}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(e) => setTyped(e.target.value)}
+          />
+        </div>
         {error && (
-          <p role="alert" className="text-xs text-warn">
+          <p role="alert" className="rounded-md border border-down bg-down-soft px-3 py-2 text-sm text-down">
             {error}
           </p>
         )}
-        <div className="mt-2 flex justify-end gap-2">
-          <ToolButton onClick={() => close(false)}>Cancel</ToolButton>
-          <ToolButton type="submit" tone="crit" disabled={!armed}>
+        <div className="mt-1 flex justify-end gap-2">
+          <Button variant="ghost" size="md" onClick={() => close(false)}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="danger" size="md" disabled={!armed}>
             {confirmLabel}
-          </ToolButton>
+          </Button>
         </div>
       </form>
     </Dialog>

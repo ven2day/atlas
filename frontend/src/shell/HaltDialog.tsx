@@ -2,8 +2,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 
 import { post } from "../api/client";
+import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
-import { ToolButton } from "../ui/Panel";
+import { TextInput } from "../ui/Input";
 import { useToasts } from "../ui/Toast";
 
 /** HALT stops new entries at once; it is always allowed (even read-only) and needs no typed
@@ -59,28 +60,26 @@ export function HaltDialog({
           e.preventDefault();
           if (reason.trim().length >= 3 && !busy) void submit();
         }}
-        className="flex flex-col gap-2"
+        className="flex flex-col gap-4"
       >
-        <label htmlFor={id} className="text-2xs text-fg-2">
-          Reason (recorded with the action)
-        </label>
-        <input
-          id={id}
-          autoFocus
-          className="h-7 w-full rounded-sm border border-line-strong bg-bg-0 px-2 text-sm text-fg-0"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={id} className="rq-label">
+            Reason (recorded with the action)
+          </label>
+          <TextInput id={id} autoFocus value={reason} onChange={(e) => setReason(e.target.value)} />
+        </div>
         {error && (
-          <p role="alert" className="text-xs text-warn">
+          <p role="alert" className="rounded-md border border-down bg-down-soft px-3 py-2 text-sm text-down">
             {error}
           </p>
         )}
-        <div className="mt-2 flex justify-end gap-2">
-          <ToolButton onClick={() => close(false)}>Cancel</ToolButton>
-          <ToolButton type="submit" tone="crit" disabled={reason.trim().length < 3 || busy}>
+        <div className="mt-1 flex justify-end gap-2">
+          <Button variant="ghost" size="md" onClick={() => close(false)}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="danger" size="md" disabled={reason.trim().length < 3 || busy}>
             Halt
-          </ToolButton>
+          </Button>
         </div>
       </form>
     </Dialog>

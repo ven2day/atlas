@@ -57,6 +57,17 @@
 | `DHAN_CLIENT_ID` | str \| None | unset | DhanHQ client ID (optional for local paper trading) |
 | `DHAN_ACCESS_TOKEN` | secret \| None | unset | DhanHQ access token (optional for local paper trading) |
 | `DHAN_BASE_URL` | str | 'https://api.dhan.co/v2' | DhanHQ API base URL (use https://api.dhan.co/v2 for live) |
+| `DHAN_PIN` | secret \| None | unset | Dhan's 6-digit PIN: sent only inside the token-generation request, never logged or stored |
+| `DHAN_TOTP_SECRET` | secret \| None | unset | Base32 TOTP secret shown once by Dhan Web > My Profile > DhanHQ Trading APIs > Setup TOTP; lets the engine refresh its own access token |
+| `DHAN_AUTH_URL` | str | 'https://auth.dhan.co' | DhanHQ auth base URL (access-token generation) |
+| `DHAN_API_KEY` | secret \| None | unset | DhanHQ app_id for the OAuth consent flow (scripts/dhan_oauth_token.py); not an access token and never sent to the data APIs |
+| `DHAN_API_SECRET` | secret \| None | unset | DhanHQ app_secret for the OAuth consent flow; never logged |
+| `DHAN_REDIRECT_URL` | str \| None | unset | The redirect URL registered for the DhanHQ app; the consent login bounces back to it with tokenId= |
+| `DHAN_TOKEN_FILE` | Path \| None | unset | Where scripts/dhan_oauth_token.py stores the access token it mints (default: <state dir>/dhan_token.json, under the gitignored var/) |
+| `DHAN_SECURITY_IDS` | str \| None | unset | Explicit Dhan mappings that override or extend the scrip master, as SYMBOL=SEGMENT:ID pairs, e.g. NIFTY50=IDX_I:13; equities come from the master by default |
+| `UNIVERSE_FILE` | Path \| None | unset | A hand-written symbol list that replaces the downloaded NIFTY 50 constituents: one SYMBOL or SYMBOL:SERIES per line, '#' starts a comment. Dhan security ids still resolve from the scrip master; the ISIN is unavailable and left empty, so pair the list with UNIVERSE_SECTORS. |
+| `UNIVERSE_SECTORS` | dict[str, str] | {} | Symbol -> sector for UNIVERSE_FILE, as JSON, e.g. {"INFY": "Information Technology"}. A symbol left out joins the risk engine's single "Unknown" bucket, where RISK_MAX_SECTOR_PCT then caps all of them together. |
+| `MARKET_DATA_PROVIDER` | 'yfinance' \| 'dhan' | 'yfinance' | Where live quotes and daily history come from. 'dhan' needs the Data API subscription and the DHAN_* credentials; demo and replay always use their own tape. |
 | `EXECUTION_MODE` | 'local_paper' \| 'shadow' \| 'dhan_paper' \| 'live' | 'local_paper' | The requested venue. The v2 engine trades on the simulated broker only: anything but local_paper/shadow is ignored, with a warning. |
 | `TELEGRAM_BOT_TOKEN` | secret \| None | unset | Telegram bot token from @BotFather |
 | `TELEGRAM_CHAT_ID` | str \| None | unset | Your Telegram chat ID from @userinfobot |

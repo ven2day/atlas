@@ -89,17 +89,33 @@ export default function App() {
     <div className="flex h-full flex-col bg-bg-0 text-fg-0">
       <DemoBanner />
       <TopBar />
-      <div className="flex min-h-0 flex-1">
-        <Nav />
-        <main id="workspace" className="min-h-0 min-w-0 flex-1 overflow-auto">
-          <Suspense fallback={null}>
-            <Outlet />
-          </Suspense>
-        </main>
-      </div>
+      <Nav />
+      <main id="workspace" className="min-h-0 min-w-0 flex-1 overflow-auto">
+        <Suspense fallback={<ScreenFallback />}>
+          <Outlet />
+        </Suspense>
+      </main>
       <StatusBar />
       <CommandPalette />
       <Toaster />
+    </div>
+  );
+}
+
+/** Shown while a screen's chunk loads: the shape of a page, not a blank frame. */
+function ScreenFallback() {
+  return (
+    <div className="flex flex-col gap-5 p-4 sm:p-6" aria-busy="true" aria-label="Loading screen">
+      <div className="flex flex-col gap-2">
+        <span className="rq-skeleton h-6 w-48" />
+        <span className="rq-skeleton h-3.5 w-80 max-w-full" />
+      </div>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <span key={i} className="rq-skeleton h-20" />
+        ))}
+      </div>
+      <span className="rq-skeleton h-72 w-full" />
     </div>
   );
 }

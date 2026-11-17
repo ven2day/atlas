@@ -1,12 +1,14 @@
-// Small pieces shared by the screens.
+// Small pieces shared by the screens: the session day, book pickers, filter controls and the
+// two links that tie the app together (a symbol → its research page, a decision → its lineage).
 
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import { useSummary } from "../api/queries";
-import { cx } from "../lib/cx";
-import { dateIST, shortId } from "../lib/format";
+import { dateIST } from "../lib/format";
 import { sessionDay } from "../shell/TopBar";
+import { SelectInput, TextInput } from "../ui/Input";
+import { Segmented } from "../ui/Segmented";
 
 /** The session's IST date (the demo's is its tape's day). */
 export function useSessionDay(): string {
@@ -19,7 +21,7 @@ export function useBookIds(): string[] {
   return data?.books.map((b) => b.book_id) ?? [];
 }
 
-/** A segmented book chooser (A · B · C), optionally with "All". */
+/** A segmented book chooser (All · A · B · C). */
 export function BookPicker({
   value,
   onChange,
@@ -30,45 +32,67 @@ export function BookPicker({
   all?: boolean;
 }) {
   const books = useBookIds();
-  const options: { id: string | undefined; label: string }[] = [
-    ...(all ? [{ id: undefined, label: "All" }] : []),
-    ...books.map((b) => ({ id: b, label: b })),
+  const options = [
+    ...(all ? [{ value: "all", label: "All" }] : []),
+    ...books.map((b) => ({ value: b, label: b })),
   ];
+  if (!options.length) return null;
   return (
-    <div role="radiogroup" aria-label="Book" className="flex">
-      {options.map((o) => (
-        <button
-          key={o.label}
-          type="button"
-          role="radio"
-          aria-checked={value === o.id}
-          onClick={() => onChange(o.id)}
-          className={cx(
-            "h-6 min-w-6 border-y border-l border-line-strong px-1.5 text-2xs first:rounded-l-sm last:rounded-r-sm last:border-r",
-            value === o.id ? "bg-bg-2 text-fg-0" : "text-fg-2 hover:text-fg-0",
-          )}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      label="Book"
+      size="xs"
+      value={value ?? (all ? "all" : undefined)}
+      onChange={(next) => onChange(next === "all" ? undefined : next)}
+      options={options}
+    />
   );
 }
 
 export function DecisionLink({ id, children }: { id: string | null | undefined; children?: ReactNode }) {
   if (!id) return <span className="text-fg-2">—</span>;
   return (
-    <Link to={`/decisions/${id}`} className="inline-flex min-h-6 min-w-6 items-center font-mono text-accent hover:underline" title={`Decision ${id}`}>
-      {children ?? shortId(id)}
+    <Link
+      to={`/decisions/${id}`}
+      className="inline-flex min-h-6 min-w-6 items-center rounded-sm font-mono text-xs text-accent-fg hover:underline"
+      title={`Decision ${id}`}
+    >
+      {children ?? id.slice(-8)}
     </Link>
   );
 }
 
 export function SymbolLink({ symbol }: { symbol: string }) {
   return (
-    <Link to={`/market?symbol=${encodeURIComponent(symbol)}`} className="inline-flex min-h-6 min-w-6 items-center text-fg-0 hover:text-accent hover:underline">
+    <Link
+      to={`/market?symbol=${encodeURIComponent(symbol)}`}
+      className="inline-flex min-h-6 min-w-6 items-center rounded-sm font-medium text-fg-0 hover:text-accent-fg hover:underline"
+      title={`Research ${symbol}`}
+    >
       {symbol}
     </Link>
+  );
+}
+
+// -- filter controls ------------------------------------------------------------------------------
+
+function FilterShell({
+  label,
+  htmlFor,
+  children,
+  className,
+}: {
+  label: string;
+  htmlFor: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`flex min-w-0 flex-col gap-1.5 ${className ?? ""}`}>
+      <label htmlFor={htmlFor} className="rq-label">
+        {label}
+      </label>
+      {children}
+    </div>
   );
 }
 
@@ -78,44 +102,39 @@ export function Select({
   value,
   options,
   onChange,
+  className,
 }: {
   label: string;
   value: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
+  className?: string;
 }) {
+  const id = useId();
   return (
-    <label className="flex items-center gap-1 text-2xs text-fg-2">
-      {label}
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-6 rounded-sm border border-line-strong bg-bg-0 px-1 text-xs text-fg-0"
-      >
+    <FilterShell label={label} htmlFor={id} className={className}>
+      <SelectInput id={id} value={value} onChange={(e) => onChange(e.target.value)} className="h-9 min-w-[9rem]">
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>
         ))}
-      </select>
-    </label>
+      </SelectInput>
+    </FilterShell>
   );
 }
 
 /** A date picker that also prints the date unambiguously (the native control follows the
  *  operating system's locale: 05/10 could be either month). */
 export function DateFilter({ value, onChange }: { value: string; onChange: (value: string | null) => void }) {
+  const id = useId();
   return (
-    <label className="flex items-center gap-1 text-2xs text-fg-2">
-      Date
-      <input
-        type="date"
-        value={value}
-        onChange={(e) => onChange(e.target.value || null)}
-        className="h-6 rounded-sm border border-line-strong bg-bg-0 px-1 text-xs text-fg-0"
-      />
-      <span className="text-xs text-fg-1">{dateIST(value)} IST</span>
-    </label>
+    <FilterShell label="Date" htmlFor={id}>
+      <div className="flex items-center gap-2">
+        <TextInput id={id} type="date" value={value} onChange={(e) => onChange(e.target.value || null)} className="h-9" />
+        <span className="whitespace-nowrap text-xs text-fg-2">{dateIST(value)} IST</span>
+      </div>
+    </FilterShell>
   );
 }
 
@@ -124,7 +143,7 @@ export function TextFilter({
   value,
   onChange,
   placeholder,
-  width = "w-24",
+  width = "w-36",
 }: {
   label: string;
   value: string;
@@ -132,16 +151,17 @@ export function TextFilter({
   placeholder?: string;
   width?: string;
 }) {
+  const id = useId();
   return (
-    <label className="flex items-center gap-1 text-2xs text-fg-2">
-      {label}
-      <input
+    <FilterShell label={label} htmlFor={id} className={width}>
+      <TextInput
+        id={id}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className={cx("h-6 rounded-sm border border-line-strong bg-bg-0 px-1.5 text-xs text-fg-0 placeholder:text-fg-2", width)}
+        className="h-9"
       />
-    </label>
+    </FilterShell>
   );
 }
 

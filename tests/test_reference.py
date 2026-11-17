@@ -9,6 +9,7 @@ from pathlib import Path
 import httpx2
 import pytest
 
+from src.config.errors import ConfigError
 from src.domain.clock import ReplayClock
 from src.domain.events import Alert
 from src.domain.sink import RecordingSink
@@ -22,8 +23,14 @@ from src.reference.instruments import (
     filter_nse_equity,
     parse_master,
 )
-from src.reference.refresh import alert_reference, refresh_reference
-from src.reference.universe import NIFTY50_URL, parse_universe, sector_map
+from src.reference.refresh import alert_reference, load_reference_offline, refresh_reference
+from src.reference.universe import (
+    NIFTY50_URL,
+    load_custom_universe,
+    parse_symbol_list,
+    parse_universe,
+    sector_map,
+)
 
 DAY = date(2026, 10, 5)
 SYMBOLS = ["INFY", "RELIANCE", "TATASTEEL"] + [f"SYM{n:02d}" for n in range(47)]
@@ -222,3 +229,93 @@ async def test_pinned_universe_is_used_and_must_exist(tmp_path: Path):
         assert data.universe_day == date(2026, 10, 1) and "universe" not in data.snapshots
         with pytest.raises(ReferenceDataError, match="pinned universe"):
             await refresh_reference(tmp_path, DAY, universe_day=date(2026, 9, 1), client=client)
+
+
+# --- a hand-written universe (UNIVERSE_FILE) ------------------------------------------------------
+
+
+def test_a_symbol_list_takes_comments_an_explicit_series_and_a_default_of_eq(tmp_path: Path):
+    listing = tmp_path / "mine.txt"
+    listing.write_text(
+        "# my book\nINFY\nare&m\nTATASTEEL:BE   # trailing note\n\n", encoding="utf-8"
+    )
+    members = load_custom_universe(listing, {"infy": "Information Technology"})
+    assert [(m.symbol, m.series) for m in members] == [
+        ("INFY", "EQ"),
+        ("ARE&M", "EQ"),
+        ("TATASTEEL", "BE"),
+    ]
+    # The sector map is matched case-insensitively; an unlisted symbol gets no sector and no ISIN.
+    assert members[0].industry == "Information Technology"
+    assert members[1].industry == "" and members[1].isin == ""
+
+
+@pytest.mark.parametrize(
+    ("text", "error"),
+    [
+        ("", "lists no symbols"),
+        ("# nothing but a comment\n\n", "lists no symbols"),
+        ("INFY\ninfy\n", "listed twice"),
+        ("INFY, TCS\n", "not an NSE trading symbol"),
+    ],
+)
+def test_an_unusable_symbol_list_names_the_line_and_the_reason(text, error):
+    with pytest.raises(ValueError, match=error):
+        parse_symbol_list(text)
+
+
+async def test_a_custom_universe_replaces_the_download_and_resolves_from_the_master(tmp_path: Path):
+    listing = tmp_path / "universe.txt"
+    listing.write_text("INFY\nRELIANCE\nNEWLIST\n", encoding="utf-8")
+    calls: list[str] = []
+    async with mock_client(ALL_ROUTES, calls) as client:
+        data = await refresh_reference(
+            tmp_path, DAY, universe_file=listing,
+            universe_sectors={"INFY": "Information Technology"}, client=client,
+        )  # fmt: skip
+    assert not any(NIFTY50_URL in call for call in calls)  # the index is never fetched
+    assert "universe" not in data.snapshots and data.universe_day == DAY
+    built = data.instruments.by_symbol
+    assert sorted(built) == ["INFY", "NEWLIST", "RELIANCE"]
+    # Security ids, ticks and company names all still come from the scrip master.
+    assert built["INFY"].broker_tokens == {"dhan": "1594"} and built["INFY"].tick_size == Decimal(
+        "0.05"
+    )
+    assert (
+        built["INFY"].name == "INFOSYS LIMITED" and built["INFY"].sector == "Information Technology"
+    )
+    assert built["RELIANCE"].sector == ""  # not annotated
+    assert set(data.problems) == {"reference_unmapped", "reference_sector_unknown"}
+
+
+async def test_annotating_every_symbol_silences_the_shared_bucket_warning(tmp_path: Path):
+    listing = tmp_path / "universe.txt"
+    listing.write_text("INFY\nRELIANCE\n", encoding="utf-8")
+    sectors = {"INFY": "Information Technology", "RELIANCE": "Metals & Mining"}
+    async with mock_client(ALL_ROUTES) as client:
+        data = await refresh_reference(
+            tmp_path, DAY, universe_file=listing, universe_sectors=sectors, client=client
+        )  # fmt: skip
+    assert "reference_sector_unknown" not in data.problems
+    assert data.instruments.by_symbol["RELIANCE"].sector == "Metals & Mining"
+
+
+async def test_a_custom_universe_file_that_is_missing_or_malformed_is_a_config_error(
+    tmp_path: Path,
+):
+    with pytest.raises(ConfigError, match="cannot be read"):
+        await refresh_reference(tmp_path, DAY, universe_file=tmp_path / "nope.txt")
+    bad = tmp_path / "bad.txt"
+    bad.write_text("INFY\nINFY\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="listed twice"):
+        await refresh_reference(tmp_path, DAY, universe_file=bad)
+
+
+def test_an_offline_replay_uses_the_custom_universe_and_the_cached_master(tmp_path: Path):
+    listing = tmp_path / "universe.txt"
+    listing.write_text("INFY\n", encoding="utf-8")
+    (tmp_path / "dhan_nse_equity_2026-10-01.csv").write_bytes(filter_nse_equity(MASTER_CSV))
+    built = load_reference_offline(tmp_path, DAY, universe_file=listing)
+    assert built is not None and list(built.by_symbol) == ["INFY"]
+    assert built.by_symbol["INFY"].broker_tokens == {"dhan": "1594"}
+    assert load_reference_offline(tmp_path, DAY) is None  # no snapshot cached, no file named

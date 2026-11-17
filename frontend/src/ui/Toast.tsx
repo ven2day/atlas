@@ -1,4 +1,4 @@
-// Toasts for alerts and control outcomes (§6.4), announced through an aria-live region.
+// Toasts for alerts and control outcomes, announced through an aria-live region.
 
 import { create } from "zustand";
 
@@ -32,9 +32,15 @@ export const useToasts = create<ToastState>((set, get) => ({
 }));
 
 const LEVEL = {
-  info: "border-line-strong",
-  warn: "border-warn",
-  crit: "border-crit-bg bg-crit-bg text-crit-fg",
+  info: "border-line-strong bg-bg-2",
+  warn: "border-warn bg-bg-2",
+  crit: "border-down bg-down-soft",
+} as const;
+
+const TITLE = {
+  info: "text-fg-0",
+  warn: "text-warn",
+  crit: "text-down",
 } as const;
 
 export function Toaster() {
@@ -43,25 +49,30 @@ export function Toaster() {
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed bottom-8 right-3 z-50 flex w-[360px] flex-col gap-2"
+      className="pointer-events-none fixed bottom-14 right-4 z-50 flex w-[380px] max-w-[calc(100vw-2rem)] flex-col gap-2.5"
     >
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={cx("pointer-events-auto rounded border bg-bg-1 px-3 py-2 shadow-popover", LEVEL[t.level])}
+          className={cx(
+            "pointer-events-auto rounded-lg border px-4 py-3 shadow-popover animate-rise-in",
+            LEVEL[t.level],
+          )}
         >
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-xs font-medium">{t.title}</p>
+          <div className="flex items-start justify-between gap-3">
+            <p className={cx("text-sm font-semibold", TITLE[t.level])}>{t.title}</p>
             <button
               type="button"
               aria-label="Dismiss"
               onClick={() => dismiss(t.id)}
-              className="text-xs text-fg-2 hover:text-fg-0"
+              className="-mr-1 -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-2 transition-colors duration-150 hover:bg-bg-3 hover:text-fg-0"
             >
-              ×
+              <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M1.5 1.5l9 9m0-9-9 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
             </button>
           </div>
-          {t.body && <p className="mt-0.5 text-xs text-fg-1">{t.body}</p>}
+          {t.body && <p className="mt-1 text-sm leading-relaxed text-fg-1">{t.body}</p>}
         </div>
       ))}
     </div>

@@ -33,11 +33,17 @@ _REDACTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
         re.compile(r"(?i)\b(access[_-]?token|api[_-]?key|token|secret|password)=\S+"),
         r"\1=[REDACTED]",
     ),
+    # Dhan's token endpoint takes the account PIN and a TOTP code as query parameters.
+    (re.compile(r"(?i)\b(pin|totp|otp)=\S+"), r"\1=[REDACTED]"),
     (
         re.compile(
             r"""(?i)(["']?(?:access[_-]?token|api[_-]?key|authorization|client[_-]?secret)"""
             r"""["']?\s*:\s*["']?)[^"'\s,}]+"""
         ),
+        r"\1[REDACTED]",
+    ),
+    (
+        re.compile(r"""(?i)(["']?(?:pin|totp|otp)["']?\s*:\s*["']?)[^"'\s,}]+"""),
         r"\1[REDACTED]",
     ),
     (re.compile(r"://[^:@/\s]+:[^@/\s]+@"), "://[REDACTED]@"),

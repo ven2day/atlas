@@ -23,7 +23,7 @@ export const keys = {
   aiSpend: (q: Query) => ["ai", "spend", q] as const,
   aiModels: ["ai", "models"] as const,
   decisionModels: (q: Query) => ["ai", "decision-models", q] as const,
-  bars: (symbol: string, days: number) => ["bars", symbol, days] as const,
+  bars: (symbol: string, days: number, adjusted = true) => ["bars", symbol, days, adjusted] as const,
   typed: (q: Query) => ["typed", q] as const,
   report: (day: string) => ["report", day] as const,
 };

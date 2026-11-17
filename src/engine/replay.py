@@ -194,7 +194,10 @@ def _replay_cascade(settings: Settings, sink: EventSink, source: EventStore | No
 
 
 def _universe(settings: Settings, day: date, quotes: Iterable[Any]) -> list[Instrument]:
-    reference = load_reference_offline(settings.reference_dir, day)
+    reference = load_reference_offline(
+        settings.reference_dir, day,
+        universe_file=settings.universe_file, universe_sectors=settings.universe_sectors,
+    )  # fmt: skip
     if reference is not None:
         return list(reference.by_symbol.values())
     keys = sorted({q.instrument_key for q in quotes})

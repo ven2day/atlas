@@ -120,7 +120,8 @@ def build_instruments(
             m.symbol,
             series=m.series,
             isin=m.isin,
-            name=m.company,
+            # A hand-written universe (UNIVERSE_FILE) has no company name; the master does.
+            name=m.company or (row.name if row else ""),
             sector=m.industry,
             tick_size=row.tick_size if row else FALLBACK_TICK,
             lot_size=row.lot_size if row else 1,

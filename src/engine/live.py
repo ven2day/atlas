@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager
 from datetime import date, datetime, time
 from pathlib import Path
@@ -40,6 +40,7 @@ from src.domain.clock import Clock, ReplayClock, WallClock, now_ist
 from src.domain.events import Alert, AnnouncementReceived
 from src.domain.types import Instrument
 from src.engine.demo import DEMO_DAY, DEMO_TAPE, ScriptedVeto, demo_instruments, pace
+from src.engine.market import INDEX_KEY, HistorySource, QuoteSource
 from src.engine.runner import Engine, build_engine, held_instruments
 from src.evaluation.books import build_advisors, engine_config
 from src.evaluation.daily_report import (
@@ -55,6 +56,16 @@ from src.llm.registry import validate_roles
 from src.llm.router import LLMRouter, StoreResponseCache
 from src.llm.setup import build_router
 from src.marketdata.announcements import AnnouncementIngestor, watermark
+from src.marketdata.composite import CompositeHistorySource
+from src.marketdata.dhan import (
+    DhanHistorySource,
+    DhanQuoteSource,
+    build_client,
+    check_data_plan,
+    validate_market_data_provider,
+)
+from src.marketdata.dhan.instruments import INDEX_SEGMENT, DhanMapping
+from src.marketdata.dhan.setup import security_overrides
 from src.marketdata.history import YFinanceHistorySource
 from src.marketdata.replay import TapeHistorySource, TapeQuoteSource
 from src.marketdata.validation import QuoteValidator, band_lookup
@@ -82,6 +93,21 @@ class EngineView(AbstractAsyncContextManager[object], Protocol):
     async def paint(self, engine: Engine) -> None: ...
 
 
+# The symbol half of INDEX_KEY. Mapping it in DHAN_SECURITY_IDS (NIFTY50=IDX_I:13) lets Dhan
+# serve the index the regime reads; without it, YFinance does.
+INDEX_SYMBOL = "NIFTY50"
+
+
+def _dhan_index_instrument(overrides: Mapping[str, DhanMapping]) -> Instrument | None:
+    mapping = overrides.get(INDEX_SYMBOL)
+    if mapping is None or mapping.segment != INDEX_SEGMENT:
+        return None
+    return Instrument(
+        key=INDEX_KEY, exchange="NSE", segment="INDEX", symbol=INDEX_SYMBOL, series="INDEX",
+        broker_tokens={"dhan": mapping.security_id},
+    )  # fmt: skip
+
+
 async def run_paper(
     settings: Settings,
     view: EngineView | None = None,
@@ -93,6 +119,7 @@ async def run_paper(
     if settings.environment == DEMO:
         raise ConfigError("the demo environment runs synthetic data: use --demo")
     validate_roles(settings)  # a misconfigured enabled LLM role fails startup (exit 2)
+    validate_market_data_provider(settings)  # and so does a provider without its credentials
     mode = settings.execution_mode
     if mode not in PAPER_MODES:
         logger.warning("EXECUTION_MODE=%s ignored: the v2 engine trades on the simulated "
@@ -106,7 +133,10 @@ async def run_paper(
     settings.state_dir.mkdir(parents=True, exist_ok=True)
     with EventStore(settings.db_path) as store:
         sink = StoreSink(store, clock, "engine")
-        reference = await refresh_reference(settings.reference_dir, now_ist(clock).date())
+        reference = await refresh_reference(
+            settings.reference_dir, now_ist(clock).date(),
+            universe_file=settings.universe_file, universe_sectors=settings.universe_sectors,
+        )  # fmt: skip
         alert_reference(reference, sink)
         universe = list(reference.instruments.by_symbol.values())
         priced = {i.key: i for i in universe}
@@ -116,14 +146,37 @@ async def run_paper(
         cascade = build_cascade(settings, sink=sink, cache=StoreResponseCache(store, DM_CACHE))
         router = build_router(settings, clock=clock, sink=sink, store=store)
         tape = TapeWriter(settings.tape_dir)
-        quotes = YFinanceQuoteSource(
-            list(priced.values()), clock=clock, sink=sink, tape=tape,
-            validator=QuoteValidator(band_lookup(priced.values())),
-            market_open=calendar.is_market_open,
-        )  # fmt: skip
+        validator = QuoteValidator(band_lookup(priced.values()))
+        quotes: QuoteSource
+        history: HistorySource
+        if settings.market_data_provider == "dhan":
+            overrides = security_overrides(settings)
+            index_instrument = _dhan_index_instrument(overrides)
+            client = build_client(settings)
+            await check_data_plan(client, sink=sink)  # a Deactive data plan stops startup
+            quotes = DhanQuoteSource(
+                list(priced.values()), clock=clock, sink=sink, client=client, tape=tape,
+                validator=validator, market_open=calendar.is_market_open, overrides=overrides,
+            )  # fmt: skip
+            history = CompositeHistorySource(
+                primary=DhanHistorySource(client=client, tape=tape, overrides=overrides),
+                secondary=YFinanceHistorySource(tape=tape),  # the NIFTY index, for the regime
+                secondary_keys=set() if index_instrument else {INDEX_KEY},
+                extra_instruments=[index_instrument] if index_instrument else [],
+            )  # fmt: skip
+            sink.emit(Alert(level="WARNING", key="dhan_history_unadjusted",
+                            message="MARKET_DATA_PROVIDER=dhan: Dhan publishes no corporate "
+                                    "actions, so its daily history is unadjusted and indicators "
+                                    "run on raw closes"), source="marketdata")  # fmt: skip
+        else:
+            quotes = YFinanceQuoteSource(
+                list(priced.values()), clock=clock, sink=sink, tape=tape,
+                validator=validator, market_open=calendar.is_market_open,
+            )  # fmt: skip
+            history = YFinanceHistorySource(tape=tape)
         engine = build_engine(
             config=config, clock=clock, calendar=calendar, store=store, quotes=quotes,
-            history=YFinanceHistorySource(tape=tape), universe=universe, limits=limits,
+            history=history, universe=universe, limits=limits,
             announcements=_announcements(settings, store, clock, sink, priced, cascade),
         )  # fmt: skip
         advisors = build_advisors(experiment, sink=sink, clock=clock, calendar=calendar,

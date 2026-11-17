@@ -78,6 +78,7 @@ class DailySeries:
 
     instrument_key: str
     frame: pd.DataFrame  # open/high/low/close/volume (raw), dividend, split, factor
+    source: MarketDataSource = MarketDataSource.YFINANCE
 
     def raw(self) -> pd.DataFrame:
         return self.frame[[*_OHLC, "volume"]].copy()
@@ -111,7 +112,7 @@ class DailySeries:
                 volume=int(row.volume),
                 is_settled=True,
                 adjusted=adjusted,
-                source=MarketDataSource.YFINANCE,
+                source=self.source,
             )
             for ts, row in zip(data.index, data.itertuples(index=False), strict=True)
         ]
@@ -305,7 +306,7 @@ def series_from_bars(
             },
             index=pd.DatetimeIndex([pd.Timestamp(d) for d in days], name="date"),
         )
-        series[key] = DailySeries(key, frame)
+        series[key] = DailySeries(key, frame, source=by_day[days[0]].source)
     lagging = {
         key: s.last_date
         for key, s in series.items()

@@ -1,6 +1,6 @@
-// The blotter table (§6.4): TanStack Table + Virtual. Sticky header, sortable and resizable
-// columns, 24 px rows, row → inspector (click or Enter), CSV export, calm empty/error states.
-// Only the visible rows are in the DOM, so 5,000 rows scroll like 50 (§6.7).
+// The table every list screen is built on: TanStack Table + Virtual. Sticky header, sortable and
+// resizable columns, roomy rows, row → inspector (click or Enter), CSV export, and calm empty,
+// loading and error states. Only the visible rows are in the DOM, so 5,000 rows scroll like 50.
 
 import {
   flexRender,
@@ -17,7 +17,8 @@ import { useRef, useState, type ReactNode } from "react";
 
 import { cx } from "../lib/cx";
 import { toNumber, type Numeric } from "../lib/format";
-import { Empty } from "./Panel";
+import { useSettings } from "../lib/settings";
+import { EmptyState, ErrorState, Skeleton } from "./Panel";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -28,7 +29,8 @@ declare module "@tanstack/react-table" {
   }
 }
 
-const ROW = 24;
+export const ROW = 40;
+const ROW_DENSE = 32;
 
 /** Money and prices arrive as decimal strings: compare them as numbers, everything else
  *  (ids, ISO timestamps) as text. */
@@ -45,6 +47,16 @@ const smartSort: SortingFn<any> = (a, b, id) => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Columns<T> = ColumnDef<T, any>[];
 
+/** A two-headed caret: the half that is not the current direction is dimmed, never absent. */
+function SortGlyph({ sorted }: { sorted: "asc" | "desc" | null }) {
+  return (
+    <svg aria-hidden="true" width="9" height="12" viewBox="0 0 9 12" fill="none" className="shrink-0">
+      <path d="M4.5 0.8 7.6 4.4H1.4z" fill="currentColor" opacity={sorted === "desc" ? 0.3 : 1} />
+      <path d="M4.5 11.2 1.4 7.6h6.2z" fill="currentColor" opacity={sorted === "asc" ? 0.3 : 1} />
+    </svg>
+  );
+}
+
 export interface DataTableProps<T> {
   data: T[] | undefined;
   columns: Columns<T>;
@@ -55,8 +67,12 @@ export interface DataTableProps<T> {
   loading?: boolean;
   error?: unknown;
   empty?: ReactNode;
+  /** The second line of the empty state: what would make it populate. */
+  emptyHint?: ReactNode;
   initialSorting?: SortingState;
   className?: string;
+  /** Force 32 px rows; by default the operator's density preference decides (40 px / 32 px). */
+  dense?: boolean;
 }
 
 export function DataTable<T>({
@@ -69,10 +85,13 @@ export function DataTable<T>({
   loading,
   error,
   empty,
+  emptyHint,
   initialSorting = [],
   className,
+  dense,
 }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
+  const preference = useSettings((s) => s.density);
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: data ?? [],
@@ -83,21 +102,34 @@ export function DataTable<T>({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     columnResizeMode: "onChange",
-    defaultColumn: { size: 110, minSize: 48, maxSize: 600, sortingFn: smartSort },
+    defaultColumn: { size: 130, minSize: 56, maxSize: 640, sortingFn: smartSort },
   });
   const scroller = useRef<HTMLDivElement>(null);
   const rows = table.getRowModel().rows;
+  const rowHeight = (dense ?? preference === "compact") ? ROW_DENSE : ROW;
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scroller.current,
-    estimateSize: () => ROW,
+    estimateSize: () => rowHeight,
     overscan: 12,
   });
   const width = table.getTotalSize();
 
   if (error) {
     const message = error instanceof Error ? error.message : "request failed";
-    return <Empty className="text-warn">Could not load: {message}</Empty>;
+    return (
+      <div className="p-4">
+        <ErrorState message={`Could not load: ${message}`} />
+      </div>
+    );
+  }
+
+  if (loading && rows.length === 0) {
+    return (
+      <div className="p-4">
+        <Skeleton rows={6} />
+      </div>
+    );
   }
 
   return (
@@ -107,12 +139,12 @@ export function DataTable<T>({
       aria-label={label}
       tabIndex={onRowClick ? undefined : 0} // rows that open nothing: the table itself scrolls by keyboard
       aria-rowcount={rows.length + 1}
-      className={cx("relative h-full min-h-0 overflow-auto text-xs", className)}
+      className={cx("relative h-full min-h-0 overflow-auto text-sm", className)}
     >
       <div style={{ minWidth: width }}>
         <div role="rowgroup" className="sticky top-0 z-10 bg-bg-2">
           {table.getHeaderGroups().map((group) => (
-            <div role="row" key={group.id} className="flex h-6 border-b border-line-strong">
+            <div role="row" key={group.id} className="flex h-9 border-b border-line-strong">
               {group.headers.map((header) => {
                 const sorted = header.column.getIsSorted();
                 const align = header.column.columnDef.meta?.align ?? "left";
@@ -121,17 +153,21 @@ export function DataTable<T>({
                     role="columnheader"
                     key={header.id}
                     aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none"}
-                    className="relative flex shrink-0 items-center px-2 text-2xs text-fg-2"
+                    className="relative flex shrink-0 items-center px-3 text-2xs font-medium uppercase tracking-wide text-fg-2"
                     style={{ width: header.getSize() }}
                   >
                     {header.isPlaceholder ? null : header.column.getCanSort() ? (
                       <button
                         type="button"
                         onClick={header.column.getToggleSortingHandler()}
-                        className={cx("flex w-full items-center gap-1 hover:text-fg-0", align === "right" && "justify-end")}
+                        className={cx(
+                          "flex w-full items-center gap-1 rounded-sm transition-colors duration-150 hover:text-fg-0",
+                          sorted && "text-accent-fg",
+                          align === "right" && "justify-end",
+                        )}
                       >
                         {flexRender(header.column.columnDef.header, header.getContext())}
-                        <span aria-hidden="true">{sorted === "asc" ? "▲" : sorted === "desc" ? "▼" : ""}</span>
+                        <SortGlyph sorted={sorted === "asc" ? "asc" : sorted === "desc" ? "desc" : null} />
                       </button>
                     ) : (
                       <span className={cx("w-full", align === "right" && "text-right")}>
@@ -145,7 +181,7 @@ export function DataTable<T>({
                         aria-label="Resize column"
                         onMouseDown={header.getResizeHandler()}
                         onTouchStart={header.getResizeHandler()}
-                        className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-accent"
+                        className="absolute right-0 top-1/4 h-1/2 w-1 cursor-col-resize rounded-full hover:bg-accent"
                       />
                     )}
                   </div>
@@ -155,7 +191,10 @@ export function DataTable<T>({
           ))}
         </div>
         {rows.length === 0 ? (
-          <Empty>{loading ? "Loading…" : (empty ?? "Nothing to show.")}</Empty>
+          <EmptyState
+            title={typeof empty === "string" ? empty : "Nothing to show"}
+            hint={typeof empty === "string" ? emptyHint : empty}
+          />
         ) : (
           <div role="rowgroup" className="relative" style={{ height: virtualizer.getTotalSize() }}>
             {virtualizer.getVirtualItems().map((item) => {
@@ -177,17 +216,17 @@ export function DataTable<T>({
                       : undefined
                   }
                   className={cx(
-                    "absolute left-0 flex w-full items-center border-b border-line",
+                    "absolute left-0 flex w-full items-center border-b border-line transition-colors duration-150",
                     clickable && "cursor-pointer hover:bg-bg-2 focus-visible:bg-bg-2",
                   )}
-                  style={{ height: ROW, transform: `translateY(${item.start}px)` }}
+                  style={{ height: rowHeight, transform: `translateY(${item.start}px)` }}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <div
                       role="cell"
                       key={cell.id}
                       className={cx(
-                        "shrink-0 truncate px-2 text-fg-0",
+                        "shrink-0 truncate px-3 text-fg-0",
                         cell.column.columnDef.meta?.align === "right" && "text-right",
                       )}
                       style={{ width: cell.column.getSize() }}

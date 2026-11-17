@@ -11,27 +11,30 @@ export interface Step {
 }
 
 const DOT = {
-  neutral: "border-line-strong bg-bg-2",
-  warn: "border-warn bg-bg-2",
-  crit: "border-crit-bg bg-crit-bg",
-  accent: "border-accent bg-bg-2",
+  neutral: "border-line-strong bg-bg-3",
+  warn: "border-warn bg-warn",
+  crit: "border-down bg-down",
+  accent: "border-accent bg-accent",
 };
 
-/** Vertical lineage steps (the Decision Inspector, §6.5). */
+/** Vertical lineage steps, one card each, joined by a rail (the Decision Inspector). */
 export function Timeline({ steps }: { steps: Step[] }) {
   return (
-    <ol className="relative ml-2 border-l border-line-strong">
+    <ol className="relative flex flex-col gap-3 pl-7">
+      <span aria-hidden="true" className="absolute bottom-5 left-[10px] top-5 w-px bg-line-strong" />
       {steps.map((step) => (
-        <li key={step.id} className="relative pb-4 pl-4 last:pb-0">
+        <li key={step.id} className="relative">
           <span
             aria-hidden="true"
-            className={cx("absolute -left-[5px] top-1.5 h-[9px] w-[9px] rounded-sm border", DOT[step.tone ?? "neutral"])}
+            className={cx("absolute -left-7 top-5 h-[21px] w-[21px] rounded-full border-2", DOT[step.tone ?? "neutral"])}
           />
-          <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-sm font-medium text-fg-0">{step.title}</h3>
-            {step.meta && <div className="shrink-0 text-xs text-fg-2">{step.meta}</div>}
+          <div className="rounded-lg border border-line bg-bg-2 px-4 py-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <h3 className="text-sm font-semibold tracking-tight text-fg-0">{step.title}</h3>
+              {step.meta && <div className="shrink-0 text-xs text-fg-2">{step.meta}</div>}
+            </div>
+            {step.children && <div className="mt-3 text-sm text-fg-1">{step.children}</div>}
           </div>
-          {step.children && <div className="mt-1 text-xs text-fg-1">{step.children}</div>}
         </li>
       ))}
     </ol>

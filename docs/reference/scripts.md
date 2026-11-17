@@ -10,9 +10,10 @@ Entry points in `scripts/`, run from the repo root with `uv run python scripts/<
 | `build_decision_labels.py` | Build the labelled announcement set for decision-model calibration (plan M7.5). |
 | `build_demo_tape.py` | (Re)write the demo's bundled fixture tape, ``src/engine/demo_tape/`` (plan M9.6), from the deterministic generator in ``src/engine/demo.py``. Only needed after changing the generator; ``tests/test_demo_tape.py`` fails until the committed tape matches it again. |
 | `calibrate_decision_models.py` | Fit and report decision-model calibration (plan M7.5) on the labelled announcement set. |
-| `check_config.py` | Readiness check: environment and state directory, enabled LLM roles (exit 2 if one is misconfigured), Dhan and Telegram status, and configuration warnings. Never prints a secret. |
+| `check_config.py` | Readiness check: environment and state directory, enabled LLM roles (exit 2 if one is misconfigured), the trading universe, Dhan and Telegram status, and configuration warnings. Never prints a secret. |
 | `daily_report.py` | Regenerate the daily report (plan M8.4) for any recorded day from the environment's event store. |
 | `deadman_check.py` | Dead-man check (plan M12.4): during market hours, send a Telegram alarm when the paper session's heartbeat is more than 3 minutes old, or missing today. Task Scheduler runs it at 10:00 and 13:00 IST on weekdays (``scripts/install_windows_task.ps1``). |
+| `dhan_oauth_token.py` | Mint a DhanHQ access token through the OAuth consent flow and store it for the engine. |
 | `export_openapi.py` | Write the web API's OpenAPI document to ``frontend/openapi.json`` (plan M9.5). The frontend's types are generated from it (``cd frontend && npm run gen:api`` → ``src/api/types.gen.ts``); CI fails when either file is stale. |
 | `fetch_bhavcopy.py` | Build the point-in-time daily dataset from NSE's UDiFF capital-market bhavcopies (plan M11.3). |
 | `gen_docs.py` | Generate the reference half of the docs from the code (plan M12.3) into ``docs/reference/``. |

@@ -2,7 +2,9 @@
 The pre-open reference refresh (plan M2.4/M2.5): universe, instrument master and price bands.
 
 * The universe is **pinned** to a snapshot date for the experiment (plan D13): pass
-  ``universe_day`` to load that snapshot, or omit it to use today's.
+  ``universe_day`` to load that snapshot, or omit it to use today's. ``universe_file``
+  (``UNIVERSE_FILE``) replaces the download with a hand-written symbol list and takes precedence
+  over both; such a list is not dated, so it is never pinned.
 * The instrument master and bands are refreshed daily; when today's download fails the newest
   cached copy is used (stale). Bands are optional (defaults apply); a missing master falls back
   to a Rs 0.05 tick for every instrument. Every degradation is reported for an alert.
@@ -10,12 +12,14 @@ The pre-open reference refresh (plan M2.4/M2.5): universe, instrument master and
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
 import httpx2
 
+from src.config.errors import ConfigError
 from src.domain.events import Alert
 from src.domain.sink import EventSink
 from src.reference.bands import BANDS_NAME, BandTable, fetch_bands, parse_bands
@@ -27,7 +31,27 @@ from src.reference.instruments import (
     fetch_master,
     parse_master,
 )
-from src.reference.universe import NIFTY50_NAME, UniverseMember, fetch_universe, load_universe
+from src.reference.universe import (
+    NIFTY50_NAME,
+    UniverseMember,
+    fetch_universe,
+    load_custom_universe,
+    load_universe,
+)
+
+# How many unsectored symbols to name in the alert before truncating.
+_SECTOR_ALERT_LIMIT = 10
+
+
+def _load_custom(path: Path, sectors: Mapping[str, str] | None) -> list[UniverseMember]:
+    """``UNIVERSE_FILE`` as members; an unreadable or malformed list is a config error (exit 2),
+    because the operator named the file and nothing else can supply the universe."""
+    try:
+        return load_custom_universe(path, sectors)
+    except OSError as exc:
+        raise ConfigError(f"UNIVERSE_FILE cannot be read ({path}): {exc.strerror or exc}") from exc
+    except ValueError as exc:
+        raise ConfigError(f"UNIVERSE_FILE {path.name} is not a usable symbol list: {exc}") from exc
 
 
 @dataclass(frozen=True)
@@ -44,16 +68,21 @@ async def refresh_reference(
     day: date,
     *,
     universe_day: date | None = None,
+    universe_file: Path | None = None,
+    universe_sectors: Mapping[str, str] | None = None,
     client: httpx2.AsyncClient | None = None,
 ) -> ReferenceData:
-    """Load the pinned (or today's) universe and today's master and bands.
+    """Load the custom, pinned or today's universe and today's master and bands.
 
-    Raises :class:`ReferenceDataError` only when no universe is available at all.
+    Raises :class:`ReferenceDataError` when no downloaded universe is available at all, and
+    :class:`~src.config.errors.ConfigError` when ``universe_file`` was named but is unusable.
     """
     problems: dict[str, str] = {}
     snapshots: dict[str, Snapshot] = {}
 
-    if universe_day is not None:
+    if universe_file is not None:
+        universe, used_day = _load_custom(universe_file, universe_sectors), day
+    elif universe_day is not None:
         pinned = snapshot_path(reference_dir, NIFTY50_NAME, universe_day, "csv")
         if not pinned.exists():
             raise ReferenceDataError(f"pinned universe snapshot {pinned.name} is missing")
@@ -92,6 +121,16 @@ async def refresh_reference(
             f"{len(instruments.unmapped)} symbols missing from the instrument master "
             f"(fallback tick, no broker token): {', '.join(instruments.unmapped)}"
         )
+    unsectored = sorted(m.symbol for m in universe if not m.industry)
+    if unsectored:
+        named = ", ".join(unsectored[:_SECTOR_ALERT_LIMIT])
+        extra = len(unsectored) - _SECTOR_ALERT_LIMIT
+        problems["reference_sector_unknown"] = (
+            f"{len(unsectored)} universe symbol(s) have no sector ({named}"
+            f"{f' and {extra} more' if extra > 0 else ''}) and share the risk engine's single "
+            "'Unknown' bucket, where RISK_MAX_SECTOR_PCT caps them all together rather than "
+            "each sector apart; add them to UNIVERSE_SECTORS"
+        )
     return ReferenceData(universe, used_day, instruments, snapshots, problems)
 
 
@@ -100,14 +139,25 @@ def alert_reference(data: ReferenceData, sink: EventSink) -> None:
         sink.emit(Alert(level="WARNING", key=key, message=message), source="reference")
 
 
-def load_reference_offline(reference_dir: Path, day: date) -> InstrumentSet | None:
+def load_reference_offline(
+    reference_dir: Path,
+    day: date,
+    *,
+    universe_file: Path | None = None,
+    universe_sectors: Mapping[str, str] | None = None,
+) -> InstrumentSet | None:
     """The newest cached universe, instrument master and bands dated on or before ``day`` - no
-    network (for replays). ``None`` when no universe snapshot is cached."""
-    universe = latest_snapshot(reference_dir, NIFTY50_NAME, "csv", day)
-    if universe is None:
-        return None
+    network (for replays). ``None`` when there is no universe at all: neither ``universe_file``
+    nor a cached snapshot."""
+    if universe_file is not None:
+        members = _load_custom(universe_file, universe_sectors)
+    else:
+        snapshot = latest_snapshot(reference_dir, NIFTY50_NAME, "csv", day)
+        if snapshot is None:
+            return None
+        members = load_universe(snapshot[1])
     master_snap = latest_snapshot(reference_dir, SCRIP_MASTER_NAME, "csv", day)
     bands_snap = latest_snapshot(reference_dir, BANDS_NAME, "csv", day)
     master = parse_master(master_snap[1].read_bytes()) if master_snap else None
     bands = parse_bands(bands_snap[1].read_bytes()) if bands_snap else None
-    return build_instruments(load_universe(universe[1]), master, bands)
+    return build_instruments(members, master, bands)

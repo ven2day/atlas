@@ -106,6 +106,16 @@ class Settings(BaseSettings):
             return Path(var_dir) / str(info.data.get("environment", "dev"))
         return _repo_path(value)
 
+    @field_validator("dhan_token_file", mode="before")
+    @classmethod
+    def _resolve_dhan_token_file(cls, value: Any) -> Any:
+        return _repo_path(value) if value not in (None, "") else None
+
+    @field_validator("universe_file", mode="before")
+    @classmethod
+    def _resolve_universe_file(cls, value: Any) -> Any:
+        return _repo_path(value) if value not in (None, "") else None
+
     @property
     def db_path(self) -> Path:
         """The environment's SQLite event store."""
@@ -257,6 +267,70 @@ class Settings(BaseSettings):
     dhan_base_url: str = Field(
         default="https://api.dhan.co/v2",
         description="DhanHQ API base URL (use https://api.dhan.co/v2 for live)",
+    )
+    dhan_pin: SecretStr | None = Field(
+        default=None,
+        description="Dhan's 6-digit PIN: sent only inside the token-generation request, "
+        "never logged or stored",
+    )
+    dhan_totp_secret: SecretStr | None = Field(
+        default=None,
+        description="Base32 TOTP secret shown once by Dhan Web > My Profile > DhanHQ Trading "
+        "APIs > Setup TOTP; lets the engine refresh its own access token",
+    )
+    dhan_auth_url: str = Field(
+        default="https://auth.dhan.co",
+        description="DhanHQ auth base URL (access-token generation)",
+    )
+    dhan_api_key: SecretStr | None = Field(
+        default=None,
+        description="DhanHQ app_id for the OAuth consent flow (scripts/dhan_oauth_token.py); "
+        "not an access token and never sent to the data APIs",
+    )
+    dhan_api_secret: SecretStr | None = Field(
+        default=None,
+        description="DhanHQ app_secret for the OAuth consent flow; never logged",
+    )
+    dhan_redirect_url: str | None = Field(
+        default=None,
+        description="The redirect URL registered for the DhanHQ app; the consent login bounces "
+        "back to it with tokenId=",
+    )
+    dhan_token_file: Path | None = Field(
+        default=None,
+        description="Where scripts/dhan_oauth_token.py stores the access token it mints "
+        "(default: <state dir>/dhan_token.json, under the gitignored var/)",
+    )
+    dhan_security_ids: str | None = Field(
+        default=None,
+        description="Explicit Dhan mappings that override or extend the scrip master, as "
+        "SYMBOL=SEGMENT:ID pairs, e.g. NIFTY50=IDX_I:13; equities come from the master by default",
+    )
+
+    # ===========================================
+    # Trading universe
+    # ===========================================
+    universe_file: Path | None = Field(
+        default=None,
+        description="A hand-written symbol list that replaces the downloaded NIFTY 50 "
+        "constituents: one SYMBOL or SYMBOL:SERIES per line, '#' starts a comment. Dhan "
+        "security ids still resolve from the scrip master; the ISIN is unavailable and left "
+        "empty, so pair the list with UNIVERSE_SECTORS.",
+    )
+    universe_sectors: dict[str, str] = Field(
+        default_factory=dict,
+        description='Symbol -> sector for UNIVERSE_FILE, as JSON, e.g. {"INFY": "Information '
+        'Technology"}. A symbol left out joins the risk engine\'s single "Unknown" bucket, '
+        "where RISK_MAX_SECTOR_PCT then caps all of them together.",
+    )
+
+    # ===========================================
+    # Market data provider
+    # ===========================================
+    market_data_provider: Literal["yfinance", "dhan"] = Field(
+        default="yfinance",
+        description="Where live quotes and daily history come from. 'dhan' needs the Data API "
+        "subscription and the DHAN_* credentials; demo and replay always use their own tape.",
     )
 
     # ===========================================

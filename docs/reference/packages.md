@@ -69,7 +69,9 @@ graph LR
   llm --> config
   llm --> domain
   llm --> store
+  marketdata --> config
   marketdata --> domain
+  marketdata --> ops
   marketdata --> store
   marketdata --> utils
   notifications --> config
@@ -81,6 +83,7 @@ graph LR
   ops --> domain
   ops --> store
   ops --> utils
+  reference --> config
   reference --> domain
   risk --> brokers
   risk --> config
@@ -265,12 +268,23 @@ Imports: `config`, `domain`, `store`.
 
 Market data v2: batched, honestly time-stamped quotes and daily history (plan M2).
 
-Imports: `domain`, `store`, `utils`.
+Imports: `config`, `domain`, `ops`, `store`, `utils`.
 
 | Module | Purpose |
 | --- | --- |
 | `marketdata/announcements.py` | Corporate-announcement ingestion (plan M7.6). |
 | `marketdata/bhavcopy.py` | NSE capital-market bhavcopies (UDiFF) as a point-in-time daily dataset (plan M11.3). |
+| `marketdata/composite.py` | Composing history sources: the primary serves the priced universe, a secondary serves the few keys the primary cannot (today: the NIFTY 50 index, which Dhan's cash-equity master has no row for and which the regime reads). |
+| `marketdata/dhan/auth.py` | The DhanHQ access-token lifecycle (verified against dhanhq.co/docs/v2/authentication/). |
+| `marketdata/dhan/client.py` | A thin, rate-limited DhanHQ v2 REST client for **market data only**. |
+| `marketdata/dhan/errors.py` | Error types for the Dhan data provider. Messages are safe to log and to show: they never carry a token, PIN, TOTP secret or client id, and any server body they quote is redacted. |
+| `marketdata/dhan/history.py` | Daily history from Dhan's ``POST /charts/historical``, shaped into the engine's ``HistorySource`` protocol. |
+| `marketdata/dhan/instruments.py` | Mapping RakshaQuant instruments onto Dhan's identifiers. |
+| `marketdata/dhan/oauth.py` | DhanHQ's OAuth consent flow (documented "Method 3"), for accounts that have an app key/secret. |
+| `marketdata/dhan/quotes.py` | Live quotes from Dhan's batched quote API, shaped into the engine's ``QuoteSource`` protocol. |
+| `marketdata/dhan/setup.py` | Startup checks and construction helpers for ``MARKET_DATA_PROVIDER=dhan``. |
+| `marketdata/dhan/timestamps.py` | Turning Dhan's timestamps into honest IST instants. |
+| `marketdata/dhan/totp.py` | RFC 6238 TOTP codes (HMAC-SHA1, 30 s step, 6 digits), which is what Dhan's token endpoint expects in its ``totp`` query parameter. |
 | `marketdata/history.py` | Daily history (plan M2.3): one batched ``yf.download(period="1y", interval="1d", auto_adjust=False, actions=True)`` per day, pre-open. |
 | `marketdata/replay.py` | Replaying a recorded tape (plan M5.6 acceptance; audit §G.4): the same engine, driven by a :class:`~src.domain.clock.ReplayClock` over what the system received on a past day. |
 | `marketdata/symbols.py` | Mapping between NSE instruments and Yahoo Finance tickers. |
@@ -319,7 +333,7 @@ Imports: `config`, `domain`, `store`, `utils`.
 
 Reference data (plan M2.4): the fixed universe, sector map, instrument master and price bands.
 
-Imports: `domain`.
+Imports: `config`, `domain`.
 
 | Module | Purpose |
 | --- | --- |
