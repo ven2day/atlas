@@ -1,0 +1,137 @@
+{
+  "source": "example_synthetic",
+  "_notice": "SYNTHETIC EXAMPLE DATA - NOT REAL ANNOUNCEMENTS. These records exist only to document the local import schema and to exercise the pipeline offline. Every title is invented, the source_ids are fake, and the document_url values are non-resolving placeholders. Do not draw any market conclusion from them, and do not import this file into the same environment you use for real research: run it with ENVIRONMENT=dev so it lands in var/dev/ and stays isolated from var/paper/.",
+  "_schema": {
+    "required": ["symbol", "published_at"],
+    "optional": ["event_type", "source_id", "document_url", "subject", "title", "body", "direction", "materiality"],
+    "published_at": "ISO-8601; read as IST when it carries no offset",
+    "event_type": "one of: results, results_date, dividend, split_bonus, pledge, insider_or_promoter, order_win, litigation_or_regulatory, management_change, rating_change, fundraise, other",
+    "direction": "optional; only supply it if your licensed source states it. positive | negative | neutral | unclear",
+    "materiality": "optional; only supply it if your licensed source states it. minor | moderate | major",
+    "note": "Records imported today keep today's receipt and recording timestamps. Nothing here is backdated."
+  },
+  "records": [
+    {
+      "symbol": "INFY",
+      "event_type": "order_win",
+      "published_at": "2026-06-03T10:12:00",
+      "source_id": "EX-0001",
+      "document_url": "https://example.invalid/announcements/EX-0001",
+      "subject": "Other",
+      "title": "SYNTHETIC EXAMPLE - company signs a multi-year services agreement",
+      "body": "Placeholder text for an invented order win. Not a real announcement."
+    },
+    {
+      "symbol": "INFY",
+      "event_type": "order_win",
+      "published_at": "2026-06-24T09:05:00",
+      "source_id": "EX-0002",
+      "document_url": "https://example.invalid/announcements/EX-0002",
+      "subject": "Other",
+      "title": "SYNTHETIC EXAMPLE - company wins a public-sector contract",
+      "body": "Placeholder text. Invented."
+    },
+    {
+      "symbol": "INFY",
+      "event_type": "order_win",
+      "published_at": "2026-07-15T16:40:00",
+      "source_id": "EX-0003",
+      "document_url": "https://example.invalid/announcements/EX-0003",
+      "subject": "Other",
+      "title": "SYNTHETIC EXAMPLE - after-close order announcement",
+      "body": "Placeholder text published after the session close, to exercise next-session anchoring."
+    },
+    {
+      "symbol": "INFY",
+      "event_type": "order_win",
+      "published_at": "2026-08-11T11:30:00",
+      "source_id": "EX-0004",
+      "document_url": "https://example.invalid/announcements/EX-0004",
+      "subject": "Other",
+      "title": "SYNTHETIC EXAMPLE - repeat of an earlier order disclosure",
+      "body": "Placeholder text. Deliberately similar to EX-0001 to exercise deduplication."
+    },
+    {
+      "symbol": "TCS",
+      "event_type": "order_win",
+      "published_at": "2026-06-09T08:55:00",
+      "source_id": "EX-0005",
+      "document_url": "https://example.invalid/announcements/EX-0005",
+      "subject": "Other",
+      "title": "SYNTHETIC EXAMPLE - company reports a large deal win",
+      "body": "Placeholder text. Invented."
+    },
+    {
+      "symbol": "TCS",
+      "event_type": "litigation_or_regulatory",
+      "published_at": "2026-07-02T14:20:00",
+      "source_id": "EX-0006",
+      "document_url": "https://example.invalid/announcements/EX-0006",
+      "subject": "Other",
+      "title": "SYNTHETIC EXAMPLE - regulator opens a review",
+      "body": "Placeholder text for an invented negative catalyst."
+    },
+    {
+      "symbol": "TCS",
+      "event_type": "order_win",
+      "published_at": "2026-08-19T10:00:00",
+      "source_id": "EX-0007",
+      "document_url": "https://example.invalid/announcements/EX-0007",
+      "subject": "Other",
+      "title": "SYNTHETIC EXAMPLE - contract award",
+      "body": "Placeholder text. Invented."
+    },
+    {
+      "symbol": "RELIANCE",
+      "event_type": "order_win",
+      "published_at": "2026-06-17T12:15:00",
+      "source_id": "EX-0008",
+      "document_url": "https://example.invalid/announcements/EX-0008",
+      "subject": "Other",
+      "title": "SYNTHETIC EXAMPLE - subsidiary secures an EPC order",
+      "body": "Placeholder text. Invented."
+    },
+    {
+      "symbol": "RELIANCE",
+      "event_type": "fundraise",
+      "published_at": "2026-07-28T09:45:00",
+      "source_id": "EX-0009",
+      "document_url": "https://example.invalid/announcements/EX-0009",
+      "subject": "Other",
+      "title": "SYNTHETIC EXAMPLE - proposed capital raise",
+      "body": "Placeholder text. A fundraise is MIXED by rule: growth capital versus dilution."
+    },
+    {
+      "symbol": "RELIANCE",
+      "event_type": "order_win",
+      "published_at": "2026-09-08T15:50:00",
+      "source_id": "EX-0010",
+      "document_url": "https://example.invalid/announcements/EX-0010",
+      "subject": "Other",
+      "title": "SYNTHETIC EXAMPLE - recent order, horizon still open",
+      "body": "Placeholder text dated close enough to today that longer horizons remain pending."
+    },
+    {
+      "symbol": "HDFCBANK",
+      "event_type": "results",
+      "published_at": "2026-07-21T18:05:00",
+      "source_id": "EX-0011",
+      "document_url": "https://example.invalid/announcements/EX-0011",
+      "subject": "Financial Result Updates",
+      "title": "SYNTHETIC EXAMPLE - quarterly results, direction supplied by the source",
+      "body": "Placeholder text. This record supplies direction and materiality, which override the rule table.",
+      "direction": "negative",
+      "materiality": "major"
+    },
+    {
+      "symbol": "SBIN",
+      "event_type": "order_win",
+      "published_at": "2026-08-05T10:30:00",
+      "source_id": "EX-0012",
+      "document_url": "https://example.invalid/announcements/EX-0012",
+      "subject": "Other",
+      "title": "SYNTHETIC EXAMPLE - award of a mandate",
+      "body": "Placeholder text. Invented."
+    }
+  ]
+}

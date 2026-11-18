@@ -2092,6 +2092,93 @@
         "title": "ReportSummary",
         "type": "object"
       },
+      "ResearchApproachSummary": {
+        "description": "One forecasting approach's walk-forward score. ``None`` means \"not measurable yet\".",
+        "properties": {
+          "approach": {
+            "title": "Approach",
+            "type": "string"
+          },
+          "brier": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brier"
+          },
+          "brier_ci": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brier Ci"
+          },
+          "fallback_count": {
+            "title": "Fallback Count",
+            "type": "integer"
+          },
+          "interval_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Coverage"
+          },
+          "interval_width": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Width"
+          },
+          "mean_abnormal_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Abnormal Return"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "approach",
+          "n",
+          "brier",
+          "brier_ci",
+          "interval_coverage",
+          "interval_width",
+          "mean_abnormal_return",
+          "fallback_count"
+        ],
+        "title": "ResearchApproachSummary",
+        "type": "object"
+      },
       "ResearchCalibrationCell": {
         "properties": {
           "bucket": {
@@ -2415,6 +2502,61 @@
           "updates"
         ],
         "title": "ResearchCardEvent",
+        "type": "object"
+      },
+      "ResearchComparisonSummary": {
+        "properties": {
+          "approach": {
+            "title": "Approach",
+            "type": "string"
+          },
+          "baseline": {
+            "title": "Baseline",
+            "type": "string"
+          },
+          "ci": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci"
+          },
+          "mean_loss_difference": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Loss Difference"
+          },
+          "n_paired": {
+            "title": "N Paired",
+            "type": "integer"
+          },
+          "verdict": {
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approach",
+          "baseline",
+          "n_paired",
+          "mean_loss_difference",
+          "ci",
+          "verdict"
+        ],
+        "title": "ResearchComparisonSummary",
         "type": "object"
       },
       "ResearchContext": {
@@ -3157,6 +3299,101 @@
           "disclaimer"
         ],
         "title": "ResearchView",
+        "type": "object"
+      },
+      "ResearchWalkForwardSummary": {
+        "description": "The latest persisted walk-forward evaluation.\n\n``available=False`` means no evaluation has been run yet. That is reported explicitly rather\nthan rendered as an empty table, which could be misread as \"measured and found no skill\".",
+        "properties": {
+          "approaches": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchApproachSummary"
+            },
+            "title": "Approaches",
+            "type": "array"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "comparisons": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchComparisonSummary"
+            },
+            "title": "Comparisons",
+            "type": "array"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "evaluation_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluation Mode"
+          },
+          "fallback_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Rate"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "totals": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Totals",
+            "type": "object"
+          }
+        },
+        "required": [
+          "available",
+          "run_id",
+          "evaluation_mode",
+          "created_at",
+          "totals",
+          "fallback_rate",
+          "approaches",
+          "comparisons",
+          "notes"
+        ],
+        "title": "ResearchWalkForwardSummary",
         "type": "object"
       },
       "ResumeBody": {
@@ -6513,6 +6750,75 @@
           }
         },
         "summary": "Research Candidates"
+      }
+    },
+    "/api/research/evaluation": {
+      "get": {
+        "description": "The latest persisted walk-forward evaluation, scoring the three approaches.\n\nRead-only. ``available`` is false until an evaluation has actually been run, so an empty\npanel can never be mistaken for a measured \"no skill found\" result.",
+        "operationId": "research_evaluation_api_research_evaluation_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchWalkForwardSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing or wrong token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "summary": "Research Evaluation"
       }
     },
     "/api/risk": {

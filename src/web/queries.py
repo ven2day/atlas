@@ -105,9 +105,12 @@ from src.web.models import (
     ReconcileRow,
     ReportBook,
     ReportSummary,
+    ResearchApproachSummary,
     ResearchCandidate,
+    ResearchComparisonSummary,
     ResearchEvaluation,
     ResearchView,
+    ResearchWalkForwardSummary,
     RiskView,
     RoleModels,
     ScheduleStep,
@@ -888,6 +891,72 @@ class Queries:
         except ValidationError as exc:
             logger.warning("the research snapshot's evaluation block is unreadable: %s", exc)
             return None
+
+    def research_walkforward(self) -> ResearchWalkForwardSummary:
+        """The latest persisted walk-forward evaluation.
+
+        A plain read of the ``research_evaluations`` table, which sits in the same database as the
+        projections but is not one (migration 0004), so rebuilding projections never touches it.
+        """
+        rows = self.store.query(
+            "SELECT * FROM research_evaluations ORDER BY julianday(created_at_utc) DESC LIMIT 1"
+        )
+        if not rows:
+            return ResearchWalkForwardSummary(
+                available=False, run_id=None, evaluation_mode=None, created_at=None, totals={},
+                fallback_rate=None, approaches=[], comparisons=[],
+                notes=["no walk-forward evaluation has been run yet: see "
+                       "scripts/research_history.py walkforward"],
+            )  # fmt: skip
+        row = rows[0]
+        try:
+            payload: dict[str, Any] = json.loads(row["payload"])
+        except (TypeError, ValueError):
+            payload = {}
+        approaches = [
+            ResearchApproachSummary(
+                approach=str(name),
+                n=int(metrics.get("n") or 0),
+                brier=metrics.get("brier"),
+                brier_ci=(
+                    [float(v) for v in metrics["brier_ci"]] if metrics.get("brier_ci") else None
+                ),
+                interval_coverage=metrics.get("interval_coverage"),
+                interval_width=metrics.get("interval_width"),
+                mean_abnormal_return=metrics.get("mean_abnormal_return"),
+                fallback_count=int(metrics.get("fallback_count") or 0),
+            )
+            for name, metrics in sorted((payload.get("by_approach") or {}).items())
+            if isinstance(metrics, dict)
+        ]
+        comparisons = [
+            ResearchComparisonSummary(
+                approach=str(item.get("approach") or ""),
+                baseline=str(item.get("baseline") or ""),
+                n_paired=int(item.get("n_paired") or 0),
+                mean_loss_difference=item.get("mean_loss_difference"),
+                ci=[float(v) for v in item["ci"]] if item.get("ci") else None,
+                verdict=str(item.get("verdict") or ""),
+            )
+            for item in (payload.get("comparisons") or [])
+            if isinstance(item, dict)
+        ]
+        created = _dt(str(row["created_at_utc"])) if row.get("created_at_utc") else None
+        return ResearchWalkForwardSummary(
+            available=True,
+            run_id=str(row.get("run_id") or "") or None,
+            evaluation_mode=str(row.get("evaluation_mode") or "") or None,
+            created_at=created,
+            totals={
+                str(key): int(value)
+                for key, value in (payload.get("totals") or {}).items()
+                if isinstance(value, int | float)
+            },
+            fallback_rate=payload.get("fallback_rate"),
+            approaches=approaches,
+            comparisons=comparisons,
+            notes=[str(note) for note in (payload.get("notes") or [])],
+        )
 
     def tape_bars(self, instrument_key: str, *, adjusted: bool) -> list[Bar]:
         """The instrument's daily bars from the newest taped history (no engine running)."""

@@ -67,6 +67,7 @@ from src.web.models import (
     PositionRow,
     ReportSummary,
     ResearchView,
+    ResearchWalkForwardSummary,
     ResumeBody,
     RiskView,
     RoleModels,
@@ -416,6 +417,15 @@ def create_app(
                 min_confidence=min_confidence, include_uncertain=include_uncertain, limit=limit,
             )
         )  # fmt: skip
+
+    @api.get("/research/evaluation")
+    async def research_evaluation() -> ResearchWalkForwardSummary:
+        """The latest persisted walk-forward evaluation, scoring the three approaches.
+
+        Read-only. ``available`` is false until an evaluation has actually been run, so an empty
+        panel can never be mistaken for a measured "no skill found" result.
+        """
+        return await read(lambda q: q.research_walkforward())
 
     @api.get("/reports/{day}")
     async def report(day: date) -> dict[str, Any]:

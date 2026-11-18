@@ -30,6 +30,7 @@ The web console's server (`src/web/server.py`), from the OpenAPI document (`fron
 | GET | `/api/reports/{day}` | - | - | object | Report |
 | GET | `/api/reports/{day}/markdown` | - | - | Document | Report Markdown |
 | GET | `/api/research/candidates` | status, sector, asset, event_type, min_confidence, include_uncertain, limit | - | ResearchView | The latest published research run, filtered. |
+| GET | `/api/research/evaluation` | - | - | ResearchWalkForwardSummary | The latest persisted walk-forward evaluation, scoring the three approaches. |
 | GET | `/api/risk` | book | - | RiskView | Risk |
 | POST | `/api/risk/flatten` | - | FlattenBody | ControlResult | Risk Flatten |
 | POST | `/api/risk/halt` | - | HaltBody | ControlResult | Block new entries. Allowed even in read-only mode (stopping risk is always OK). |

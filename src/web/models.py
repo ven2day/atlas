@@ -765,3 +765,43 @@ class ResearchView(ApiModel):
     evaluation: ResearchEvaluation | None
     data_gaps: list[str]
     disclaimer: str
+
+
+class ResearchApproachSummary(ApiModel):
+    """One forecasting approach's walk-forward score. ``None`` means "not measurable yet"."""
+
+    approach: str
+    n: int
+    brier: float | None
+    brier_ci: list[float] | None
+    interval_coverage: float | None
+    interval_width: float | None
+    mean_abnormal_return: float | None
+    fallback_count: int
+
+
+class ResearchComparisonSummary(ApiModel):
+    approach: str
+    baseline: str
+    n_paired: int
+    mean_loss_difference: float | None
+    ci: list[float] | None
+    verdict: str
+
+
+class ResearchWalkForwardSummary(ApiModel):
+    """The latest persisted walk-forward evaluation.
+
+    ``available=False`` means no evaluation has been run yet. That is reported explicitly rather
+    than rendered as an empty table, which could be misread as "measured and found no skill".
+    """
+
+    available: bool
+    run_id: str | None
+    evaluation_mode: str | None
+    created_at: datetime | None
+    totals: dict[str, int]
+    fallback_rate: float | None
+    approaches: list[ResearchApproachSummary]
+    comparisons: list[ResearchComparisonSummary]
+    notes: list[str]
