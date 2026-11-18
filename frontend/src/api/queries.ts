@@ -27,6 +27,7 @@ export const keys = {
   typed: (q: Query) => ["typed", q] as const,
   report: (day: string) => ["report", day] as const,
   research: (q: Query) => ["research", q] as const,
+  researchEvaluation: ["research", "evaluation"] as const,
 };
 
 /** Which projections each stream topic can change. */

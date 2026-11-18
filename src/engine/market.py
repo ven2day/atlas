@@ -15,7 +15,7 @@ import logging
 from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from datetime import date
 from decimal import Decimal
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from src.domain.events import Alert
 from src.domain.sink import EventSink
@@ -201,7 +201,11 @@ def dhan_index_instrument(overrides: Mapping[str, DhanMapping]) -> Instrument | 
 
 
 def build_history_source(
-    settings: Settings, *, tape: TapeWriter | None = None
+    settings: Settings,
+    *,
+    tape: TapeWriter | None = None,
+    lookback_days: int | None = None,
+    period: str | None = None,
 ) -> HistorySourceLike:
     """The daily-history source for the configured provider, index included.
 
@@ -209,21 +213,35 @@ def build_history_source(
     other read-only consumers later - agrees with the session about where prices come from and
     keeps each bar's own ``source`` rather than blending providers. Imports are local: this keeps
     the Dhan stack out of the import graph of a CLI-only or YFinance-only install.
+
+    ``lookback_days`` (Dhan) and ``period`` (YFinance) widen the window for historical research.
+    Both are bounded by what the provider actually serves, so a caller asking for more than exists
+    gets less and the shortfall is visible in the price provenance, not silently padded.
     """
     from src.marketdata.composite import CompositeHistorySource
     from src.marketdata.history import YFinanceHistorySource
 
+    yfinance_kwargs: dict[str, Any] = {"tape": tape}
+    if period is not None:
+        yfinance_kwargs["period"] = period
     if settings.market_data_provider != "dhan":
-        return YFinanceHistorySource(tape=tape)
+        return YFinanceHistorySource(**yfinance_kwargs)
 
     from src.marketdata.dhan.history import DhanHistorySource
     from src.marketdata.dhan.setup import build_client, security_overrides
 
     overrides = security_overrides(settings)
     index_instrument = dhan_index_instrument(overrides)
+    dhan_kwargs: dict[str, Any] = {
+        "client": build_client(settings),
+        "tape": tape,
+        "overrides": overrides,
+    }
+    if lookback_days is not None:
+        dhan_kwargs["lookback_days"] = lookback_days
     return CompositeHistorySource(
-        primary=DhanHistorySource(client=build_client(settings), tape=tape, overrides=overrides),
-        secondary=YFinanceHistorySource(tape=tape),  # the NIFTY index, for the regime
+        primary=DhanHistorySource(**dhan_kwargs),
+        secondary=YFinanceHistorySource(**yfinance_kwargs),  # the NIFTY index, for the regime
         secondary_keys=set() if index_instrument is not None else {INDEX_KEY},
         extra_instruments=[index_instrument] if index_instrument is not None else [],
     )

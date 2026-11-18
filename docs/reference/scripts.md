@@ -20,6 +20,7 @@ Entry points in `scripts/`, run from the repo root with `uv run python scripts/<
 | `llm_check.py` | LLM connectivity check (plan M6): one tiny schema-validated call per **enabled** role, through the real router (fallbacks, budgets, breakers; the reply cache is bypassed), recorded as ``LLMCall`` events in the environment's store. Prints, per role:: |
 | `nightly_review.py` | Nightly post-trade review (plan M8.7): role ``review`` writes structured lessons for each trade closed on the day; stored as ``TradeReview`` events, never fed back into any book in month 1. The engine already runs it after the daily report; use this to (re)run it for a day. |
 | `replay_day.py` | Replay a recorded day through the engine (plan M8.5): the day's tape, the reference snapshots cached for it, the announcements the live run stored, and cached LLM and decision-model responses (no network). Writes a fresh event store and the day's report. |
+| `research_history.py` | Historical event research: import, coverage, outcomes, walk-forward evaluation and reporting. |
 | `run_live_trading.py` | RakshaQuant — main entry point. |
 | `run_research.py` | Event-aware market research: candidate cards with probabilistic forecasts and their evidence. |
 | `setup.py` | Guided one-command setup for RakshaQuant. |

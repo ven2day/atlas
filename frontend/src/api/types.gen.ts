@@ -419,6 +419,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research/evaluation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Research Evaluation
+         * @description The latest persisted walk-forward evaluation, scoring the three approaches.
+         *
+         *     Read-only. ``available`` is false until an evaluation has actually been run, so an empty
+         *     panel can never be mistaken for a measured "no skill found" result.
+         */
+        get: operations["research_evaluation_api_research_evaluation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/risk": {
         parameters: {
             query?: never;
@@ -1310,6 +1333,28 @@ export interface components {
             /** Experiment */
             experiment: string;
         };
+        /**
+         * ResearchApproachSummary
+         * @description One forecasting approach's walk-forward score. ``None`` means "not measurable yet".
+         */
+        ResearchApproachSummary: {
+            /** Approach */
+            approach: string;
+            /** Brier */
+            brier: number | null;
+            /** Brier Ci */
+            brier_ci: number[] | null;
+            /** Fallback Count */
+            fallback_count: number;
+            /** Interval Coverage */
+            interval_coverage: number | null;
+            /** Interval Width */
+            interval_width: number | null;
+            /** Mean Abnormal Return */
+            mean_abnormal_return: number | null;
+            /** N */
+            n: number;
+        };
         /** ResearchCalibrationCell */
         ResearchCalibrationCell: {
             /** Bucket */
@@ -1410,6 +1455,21 @@ export interface components {
             updates: string[];
             /** Url */
             url: string | null;
+        };
+        /** ResearchComparisonSummary */
+        ResearchComparisonSummary: {
+            /** Approach */
+            approach: string;
+            /** Baseline */
+            baseline: string;
+            /** Ci */
+            ci: number[] | null;
+            /** Mean Loss Difference */
+            mean_loss_difference: number | null;
+            /** N Paired */
+            n_paired: number;
+            /** Verdict */
+            verdict: string;
         };
         /** ResearchContext */
         ResearchContext: {
@@ -1592,6 +1652,35 @@ export interface components {
             evaluation: components["schemas"]["ResearchEvaluation"] | null;
             /** Horizon */
             horizon: number;
+        };
+        /**
+         * ResearchWalkForwardSummary
+         * @description The latest persisted walk-forward evaluation.
+         *
+         *     ``available=False`` means no evaluation has been run yet. That is reported explicitly rather
+         *     than rendered as an empty table, which could be misread as "measured and found no skill".
+         */
+        ResearchWalkForwardSummary: {
+            /** Approaches */
+            approaches: components["schemas"]["ResearchApproachSummary"][];
+            /** Available */
+            available: boolean;
+            /** Comparisons */
+            comparisons: components["schemas"]["ResearchComparisonSummary"][];
+            /** Created At */
+            created_at: string | null;
+            /** Evaluation Mode */
+            evaluation_mode: string | null;
+            /** Fallback Rate */
+            fallback_rate: number | null;
+            /** Notes */
+            notes: string[];
+            /** Run Id */
+            run_id: string | null;
+            /** Totals */
+            totals: {
+                [key: string]: number;
+            };
         };
         /** ResumeBody */
         ResumeBody: {
@@ -3485,6 +3574,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResearchView"];
+                };
+            };
+            /** @description Missing or wrong token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    research_evaluation_api_research_evaluation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchWalkForwardSummary"];
                 };
             };
             /** @description Missing or wrong token */

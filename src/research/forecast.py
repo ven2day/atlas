@@ -391,6 +391,26 @@ def _underperformance(
     return round(float(np.mean(worse)), 6)
 
 
+def technical_state_by_date(series: DailySeries) -> dict[date, tuple[str, str]]:
+    """``(trend, volatility band)`` per session date, each from data available at that bar.
+
+    Exposed so the walk-forward evaluator conditions on exactly the state definition the live
+    forecaster uses, rather than a second implementation free to drift from it.
+    """
+    close = series.adjusted()["close"].astype(float)
+    trend, annualized, _sigma = _states(close)
+    band = _vol_bands(annualized)
+    out: dict[date, tuple[str, str]] = {}
+    for stamp in close.index:
+        day = (
+            stamp.date()
+            if isinstance(stamp, pd.Timestamp | datetime)
+            else date.fromisoformat(str(stamp))
+        )
+        out[day] = (str(trend.loc[stamp]), str(band.loc[stamp]))
+    return out
+
+
 def forecast_all(
     series: Sequence[DailySeries],
     *,

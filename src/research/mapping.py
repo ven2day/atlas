@@ -154,6 +154,18 @@ def _resolve(
     )
 
 
+def rule_for(
+    event_type: AnnouncementType,
+) -> tuple[EventChannel, ImpactDirection | None, bool]:
+    """The rule for one event type: ``(channel, direction knowable from the type, spillover)``.
+
+    Public so the historical backfill classifies with the *same* table the live path uses instead
+    of maintaining a second one that could silently drift. A ``None`` direction means the type
+    alone does not determine it.
+    """
+    return _RULES[event_type]
+
+
 def map_event(event: ResearchEvent) -> tuple[EventImpact, ...]:
     """Every impact of one event: the issuer's, and a sector spillover where the rule allows it."""
     if event.asset is AssetClass.UNSUPPORTED:

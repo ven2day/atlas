@@ -191,6 +191,151 @@ Opposing active issuer catalysts produce `WATCH`.
 Each run also writes `var/reports/research_latest.json`, the snapshot the console serves. That
 file carries the event study and the data-gap list, which are computed live and have no table.
 
+## Historical research and walk-forward validation
+
+Everything above operates on what the engine happened to observe live. That is a thin dataset for
+months, so there is a second path: import historical announcements, reconstruct what *would* have
+been knowable, and score the forecasters over history. It is driven by one CLI:
+
+```bash
+uv run python scripts/research_history.py import     --file <export.json> --from 2026-06-01 --to 2026-09-30
+uv run python scripts/research_history.py coverage
+uv run python scripts/research_history.py outcomes   --mode reconstructed
+uv run python scripts/research_history.py walkforward --run-id my-run --mode reconstructed
+uv run python scripts/research_history.py report     --run-id my-run --markdown var/reports/wf.md
+```
+
+Every stage supports `--dry-run`, and `import` supports `--symbol`, `--chunk-days`,
+`--min-interval` and `--max-retries`. A worked example dataset, clearly labelled synthetic, is at
+[`docs/examples/historical-events.example.json`](examples/historical-events.example.json). Run it
+with `ENVIRONMENT=dev` so it lands in `var/dev/` and never mixes with real research in `var/paper/`.
+
+### Where historical announcements can come from
+
+**NSE offers no official free date-range API for historical corporate announcements.** This was
+checked rather than assumed:
+
+| Source | Historical date-range access | Used here? |
+| --- | --- | --- |
+| NSE RSS (`Online_announcements.xml`) | No — the newest ~165 items only | Already used for live ingest; **not** a historical source |
+| `nsearchives.nseindia.com` | File-based only: direct URLs to individual PDFs/XML, no query API | No |
+| `nseindia.com` corporate-filings page | Driven by undocumented internal endpoints | No — OD-10 forbids adding NSE scraping |
+| NSE *Corporate Data* subscription (paid) | Yes, by license | You supply the export |
+| Authorized third-party vendors | Yes, by license | You supply the export or configure `--url` |
+
+So the importer ships two adapters and **no invented endpoint**:
+
+- `LocalFileSource` — the supported path. You provide a JSON or CSV export you are licensed to
+  hold. The schema is documented in the example file: `symbol` and `published_at` are required;
+  `event_type`, `source_id`, `document_url`, `subject`, `title`, `body`, `direction` and
+  `materiality` are optional. `direction`/`materiality` are honoured **only** if your source
+  actually states them; otherwise the rule table decides the direction and materiality stays
+  unrated rather than being guessed.
+- `HttpArchiveSource` — a generic adapter for an archive *you* configure, with a field map,
+  cursor path and your own credentials. With no `--url` it raises `SourceNotConfiguredError` and
+  the import is recorded as `failed`. It will not fall back to guessing an NSE endpoint.
+
+Import guarantees: stable dedup identity (the source's own id, else a content hash), resumable
+cursors persisted per run, bounded retries with exponential backoff on retryable failures only,
+pacing between requests, and a per-window coverage record. **A window whose fetch failed is
+recorded as `failed` and the import finishes `partial`** — a missing response is never converted
+into "there were no events".
+
+### Four timestamps, and two evaluation modes
+
+Publication, receipt, classification availability and event-store recording are separate columns
+that nothing may collapse. In particular **an import never backdates**: a 2024 announcement
+imported today stores today as its receipt and recording time.
+
+| Mode | Availability used | Claims |
+| --- | --- | --- |
+| `actual` (A) | `max(published, received, classified, recorded)` — all recorded facts | What this installation really knew. The only mode that measures the deployed system. |
+| `reconstructed` (B) | `published + assumed ingestion lag` (default 5 min) and classification lag (2 min) | A stated assumption. Lags are configurable and the label is printed on every row and report. |
+
+Mode B is what makes historical import usable at all — under mode A, everything imported today
+becomes available today, so no historical origin can be evaluated. But mode B is a model of
+availability, not a memory of it, and the two are never pooled: `check_single_mode` raises
+`MixedEvaluationModesError` if a statistic would mix them, and every report carries the mode.
+
+Applying today's rule table to an old announcement is **retrospective classification**. Each
+classification row records `model`, `rules_version`, `classified_at` and `retrospective`, and a
+re-read under a new rules version writes a *new* row that supersedes the old one rather than
+overwriting it. Reports repeat the limitation.
+
+### Outcomes
+
+`outcomes` fetches daily bars through the existing provider abstractions
+(`build_history_source`, widened via `--lookback-days` / `--period`) and records provenance per
+instrument: provider, retrieval time, requested versus available range, missing sessions against
+the exchange calendar, adjustment method, and benchmark coverage. For each event it computes
+1/5/10/20-session outcomes — instrument return, benchmark return over **identical session
+endpoints**, abnormal return, and an outcome bucket using the same sideways definition as the
+forecaster.
+
+- The anchor is the first session that **closes after** the information was available
+  (`timing.first_close_after`), so an after-close, weekend or holiday event anchors to the next
+  session and never borrows a close that had already happened.
+- A horizon that has not fully elapsed stays **`pending`**. It is never zero and never dropped
+  silently.
+- If the benchmark lacks either endpoint the observation becomes `no_benchmark`. The raw
+  instrument return is kept; the abnormal return is refused rather than assumed to be zero.
+- These are **close-to-close reaction measurements, not trade returns.** No entry policy, fills,
+  slippage or latency is modelled. Executable performance stays with `src/backtesting/edge.py`.
+- The evaluated instrument set comes from today's scrip master and universe, so delisted issuers
+  are absent. Every affected dataset is annotated `SURVIVORSHIP` rather than presented as
+  unbiased.
+
+### Walk-forward
+
+Origins are the events' own anchor dates. At each origin, training outcomes are those that
+**completed strictly before the origin minus an embargo** — which is also the purge, since a
+window that ended before the origin cannot overlap the window being forecast. Overlapping windows
+on one instrument are dropped greedily and the drop count is reported.
+
+Three approaches are published for every observation, so their scores are paired:
+
+| Approach | Trains on |
+| --- | --- |
+| `unconditional` | all of that issuer's event-anchored outcomes at the horizon |
+| `technical` | the subset whose anchor bar shares today's trend and volatility band |
+| `event_conditioned` | the cohort `issuer \| event_type \| direction \| materiality` |
+
+`pooled_event` (which drops the issuer from the cohort) exists but is **off by default** and
+separately named, because pooling issuers buys sample size by assuming they are interchangeable.
+Enable it explicitly with `--allow-pooling`.
+
+When the requested cohort is too thin, the publication falls back down that order and sets
+`fallback_used`, recording both the requested and the actually-used approach. Publications are
+immutable: `save_walkforward` is `ON CONFLICT DO NOTHING`, so a later run can never rewrite a
+frozen forecast. Origins are split chronologically and the last `--holdout` fraction is flagged,
+keeping parameter selection off the final period. Each row persists its run id, fold, cohort,
+sample size and the full configuration fingerprint.
+
+### Metrics and uncertainty
+
+Reports cover: total and usable events, coverage exclusions, pending horizons, cohort sample
+sizes, fallback frequency, multiclass Brier, reliability tables, q10–q90 interval coverage and
+width, directional and benchmark-relative outcomes, and paired loss differences against both
+baselines.
+
+Uncertainty uses a **moving-block bootstrap** over observations ordered by origin, with a block
+length at least the longest horizon. Overlapping event windows are not independent, so an i.i.d.
+interval would be too narrow and would manufacture significance. Below `MIN_REPORT_SAMPLES` (20)
+no interval is reported; below `MIN_PROMOTION_SAMPLES` (50) a paired comparison cannot name a
+winner at all and returns `insufficient evidence to prefer either`.
+
+No after-cost strategy performance is reported anywhere in this path, because no entry/exit
+execution policy with fills and slippage has been implemented for research setups. The report
+says so explicitly instead of implying it.
+
+### Storage
+
+Migration `0004_research_history.sql` adds seven tables — `research_source_records`,
+`research_imports`, `research_classifications`, `research_price_datasets`,
+`research_event_outcomes`, `research_walkforward`, `research_evaluations`. Like 0003 it is purely
+additive: no existing table or column changes, existing research publications and all trading data
+are preserved, and none of them are projections.
+
 ## Configuration
 
 No new settings. The research run uses what is already configured:

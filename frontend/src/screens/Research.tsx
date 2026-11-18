@@ -336,6 +336,14 @@ export default function Research() {
   const candidates = view?.candidates ?? [];
   const evaluation = view?.evaluation ?? null;
   const counts = view?.counts ?? {};
+  // The walk-forward evaluation is published by scripts/research_history.py, not by this screen:
+  // it is read-only here, and an absent evaluation is shown as absent rather than as zeros.
+  const walkForward = useQuery({
+    queryKey: keys.researchEvaluation,
+    queryFn: ({ signal }) => get("/api/research/evaluation", { signal }),
+    staleTime: 60_000,
+  });
+  const wf = walkForward.data;
 
   return (
     <Page>
@@ -503,6 +511,92 @@ export default function Research() {
           </div>
         </Panel>
       ) : null}
+      <Panel
+        title="Walk-forward evaluation"
+        description={
+          wf?.available
+            ? `Run ${wf.run_id ?? "—"} · mode ${wf.evaluation_mode ?? "—"} · published ${wf.created_at ?? "—"}`
+            : "No walk-forward evaluation has been published yet."
+        }
+        footer="Frozen forecasts scored only against outcomes that completed after their origin. Intervals use a moving-block bootstrap, because overlapping event windows are not independent samples. These are close-to-close reaction measurements, not trade returns."
+      >
+        {wf?.available ? (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="text-fg-2 text-left">
+                    <th className="font-normal">approach</th>
+                    <th className="font-normal">n</th>
+                    <th className="font-normal">Brier</th>
+                    <th className="font-normal">95% CI</th>
+                    <th className="font-normal">q10–q90 coverage</th>
+                    <th className="font-normal">mean AR</th>
+                    <th className="font-normal">fallbacks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {wf.approaches.map((a) => (
+                    <tr key={a.approach} className="border-line border-t">
+                      <td className="text-fg-1">{a.approach}</td>
+                      <td className="text-fg-1">{a.n}</td>
+                      <td className="text-fg-1">{a.brier === null ? "—" : num(a.brier, 4)}</td>
+                      <td className="text-fg-1">
+                        {a.brier_ci
+                          ? `${num(a.brier_ci[0], 4)} … ${num(a.brier_ci[1], 4)}`
+                          : "insufficient"}
+                      </td>
+                      <td className="text-fg-1">
+                        {a.interval_coverage === null ? "—" : pct(a.interval_coverage)}
+                      </td>
+                      <td className="text-fg-1">{signed(a.mean_abnormal_return)}</td>
+                      <td className="text-fg-1">{a.fallback_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {wf.comparisons.length > 0 ? (
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="text-fg-2 text-left">
+                      <th className="font-normal">approach</th>
+                      <th className="font-normal">vs baseline</th>
+                      <th className="font-normal">n paired</th>
+                      <th className="font-normal">mean loss diff</th>
+                      <th className="font-normal">verdict</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {wf.comparisons.map((c) => (
+                      <tr key={`${c.approach}-${c.baseline}`} className="border-line border-t">
+                        <td className="text-fg-1">{c.approach}</td>
+                        <td className="text-fg-1">{c.baseline}</td>
+                        <td className="text-fg-1">{c.n_paired}</td>
+                        <td className="text-fg-1">{signed(c.mean_loss_difference, 6)}</td>
+                        <td className="text-fg-1">{c.verdict}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            <ul className="mt-2 space-y-0.5 text-[11px] text-warn">
+              {wf.notes.map((note) => (
+                <li key={note}>! {note}</li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className="text-[12px] text-fg-2">
+            Nothing to show until an evaluation is published. Run{" "}
+            <code className="text-fg-1">scripts/research_history.py walkforward</code> after
+            importing history and building outcomes. An empty panel here means "not measured yet",
+            never "measured and found nothing".
+          </p>
+        )}
+      </Panel>
     </Page>
   );
 }
