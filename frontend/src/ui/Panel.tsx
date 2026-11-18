@@ -112,6 +112,26 @@ export function ErrorState({ message, className }: { message: string; className?
   );
 }
 
+/** Data that is present but no longer current. Shown alongside the numbers, never instead of
+ *  them, and never silently: a stale price that looks fresh is how a bad decision gets made. */
+export function StaleNotice({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div
+      role="status"
+      className={cx(
+        "flex items-start gap-2 rounded-md border border-warn bg-warn-soft px-3 py-2 text-xs leading-relaxed text-warn",
+        className,
+      )}
+    >
+      <svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16" fill="none" className="mt-0.5 shrink-0">
+        <path d="M8 2.2v6M8 11.1v.9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        <circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.2" />
+      </svg>
+      <span className="min-w-0 break-words">{children}</span>
+    </div>
+  );
+}
+
 /** A loading placeholder shaped like the content it stands in for. */
 export function Skeleton({ className, rows = 3 }: { className?: string; rows?: number }) {
   return (

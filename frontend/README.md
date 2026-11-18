@@ -1,12 +1,35 @@
 # RakshaQuant console (frontend v2)
 
-The browser terminal for the v2 engine: eight screens over the web API (`src/web`), built to the
+The browser terminal for the v2 engine: nine screens over the web API (`src/web`), built to the
 design spec in `docs/plan/2026-10-01-platform-v2-plan.md` §6. It only *formats* server
 projections: it never computes money, and nothing is fabricated outside the demo.
 
 React 18 + Vite + strict TypeScript, TanStack Query (REST projections) and a zustand store fed by
 the WebSocket event stream, TanStack Table + Virtual, Radix primitives, cmdk, lightweight-charts
 (lazy-loaded), IBM Plex. Screenshots of every screen: `docs/ui/screens/`.
+
+## Layout
+
+A grouped **sidebar** (`src/shell/Nav.tsx`) on desktop, collapsing to an icon rail; below `lg` it
+becomes an off-canvas sheet opened from the top bar. Sections are declared once, in
+`NAV_SECTIONS` in `src/app/routes.tsx`:
+
+| Section | Screens |
+| --- | --- |
+| Overview | Command |
+| Trading | Decisions, Blotter, Risk, Experiment |
+| Research | AI desk, Research, Market |
+| System | System |
+
+The top bar carries what must never be buried: session state and clock, data freshness, broker
+reconciliation, each book's kill switch, today's AI spend, and **HALT**. The sidebar holds
+navigation only - no safety control lives in it, so collapsing or closing the sidebar can never
+put HALT out of reach. Single-key shortcuts (off by default) keep their original 1-9 bindings
+regardless of which section a screen sits in.
+
+Dense detail lives in `ui/Collapsible.tsx` (summary first, body on demand), and every query goes
+through `ui/QueryState.tsx` so loading, error, empty and stale all look - and read - the same on
+every screen.
 
 ## Requirements
 

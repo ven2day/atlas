@@ -13,7 +13,8 @@ import { Chart, type ChartLine } from "../ui/Chart";
 import { Dialog } from "../ui/Dialog";
 import { DateIST, Money, Pct } from "../ui/Num";
 import { Page, PageHeader } from "../ui/PageHeader";
-import { Empty, EmptyState, Panel } from "../ui/Panel";
+import { EmptyState, ErrorState, Panel, Skeleton } from "../ui/Panel";
+import { QueryGate, describeError } from "../ui/QueryState";
 import { Table } from "../ui/Table";
 
 interface ReportBook {
@@ -83,14 +84,23 @@ export default function Experiment() {
         footer="Net AI value = (book equity − book A equity) − that book's AI spend. Sharpe, Sortino, drawdown, expectancy and costs are month-to-date from the latest daily report."
         bodyClassName="overflow-x-auto"
       >
-        {(books.data?.books ?? []).length === 0 ? (
-          <Empty>{books.isLoading ? "Loading…" : "No books configured."}</Empty>
-        ) : (
+        <QueryGate
+          isLoading={books.isLoading}
+          isError={books.isError}
+          error={books.error}
+          data={books.data?.books}
+          isEmpty={(rows) => rows.length === 0}
+          emptyTitle="No books configured"
+          emptyHint="The paired books come from src/config/experiment.yaml and appear here once a session has recorded marks for them."
+          className="p-4"
+          skeletonRows={3}
+        >
+          {(paired) => (
           <Table
             minWidth={1180}
             head={["Book", "Advisor", "Return", "Sharpe (95% CI)", "Sortino", "Max DD", "Trades", "Win %", "Expectancy", "Costs MTD", "AI spend", "Net AI value"]}
             align={["l", "l", "r", "r", "r", "r", "r", "r", "r", "r", "r", "r"]}
-            rows={(books.data?.books ?? []).map((b) => {
+            rows={paired.map((b) => {
               const r = reportBooks[b.book_id];
               const ra = r?.risk_adjusted_mtd;
               const mtd = r?.trades?.month_to_date;
@@ -113,7 +123,8 @@ export default function Experiment() {
               ];
             })}
           />
-        )}
+          )}
+        </QueryGate>
       </Panel>
 
       <Panel title="Return on capital" description="Each book's cumulative return in percent; NIFTY 50 dashed">
@@ -150,7 +161,13 @@ export default function Experiment() {
       </Panel>
 
       <Dialog open={open !== null} onOpenChange={(o) => !o && setOpen(null)} title={doc.data?.title ?? "Loading…"} wide>
-        {doc.data ? <Markdown text={doc.data.markdown} /> : <Empty>{doc.error ? "Could not load the document." : "Loading…"}</Empty>}
+        {doc.data ? (
+          <Markdown text={doc.data.markdown} />
+        ) : doc.isError ? (
+          <ErrorState message={`Could not load this document: ${describeError(doc.error)}`} />
+        ) : (
+          <Skeleton rows={8} className="px-5 py-4" />
+        )}
       </Dialog>
     </Page>
   );

@@ -86,16 +86,18 @@ export default function App() {
   useKeyboard();
   if (useUnauthorized()) return <Unauthorized />;
   return (
-    <div className="flex h-full flex-col bg-bg-0 text-fg-0">
-      <DemoBanner />
-      <TopBar />
+    <div className="flex h-full bg-bg-0 text-fg-0">
       <Nav />
-      <main id="workspace" className="min-h-0 min-w-0 flex-1 overflow-auto">
-        <Suspense fallback={<ScreenFallback />}>
-          <Outlet />
-        </Suspense>
-      </main>
-      <StatusBar />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <DemoBanner />
+        <TopBar />
+        <main id="workspace" className="min-h-0 min-w-0 flex-1 overflow-auto">
+          <Suspense fallback={<ScreenFallback />}>
+            <Outlet />
+          </Suspense>
+        </main>
+        <StatusBar />
+      </div>
       <CommandPalette />
       <Toaster />
     </div>

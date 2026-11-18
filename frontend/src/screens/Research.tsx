@@ -13,8 +13,10 @@ import { get, type Schemas } from "../api/client";
 import { keys } from "../api/queries";
 import { Icon } from "../shell/icons";
 import { Badge, type Tone } from "../ui/Badge";
+import { Collapsible } from "../ui/Collapsible";
 import { Page, PageHeader, Toolbar } from "../ui/PageHeader";
-import { Panel } from "../ui/Panel";
+import { ErrorState, Panel, Skeleton } from "../ui/Panel";
+import { describeError } from "../ui/QueryState";
 import { Select, SymbolLink, TextFilter } from "./common";
 
 type Candidate = Schemas["ResearchCandidate"];
@@ -136,22 +138,48 @@ function CandidateCard({ card }: { card: Candidate }) {
   const prediction = card.forecast;
   const context = card.context;
   return (
-    <Panel
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          <SymbolLink symbol={card.symbol} />
-          <Badge tone={STATUS_TONE[card.status] ?? "neutral"}>{card.status}</Badge>
-          <span className="text-[12px] font-normal text-fg-2">
-            {card.sector ?? "sector unknown"} · {card.asset} · {card.horizon_sessions}-session horizon
-          </span>
+    <Collapsible
+      title={`${card.symbol} ${card.status}`}
+      // Summary first: the figures a trader scans for are in the header, so a long list of
+      // candidates stays readable. The actionable ones start open; the rest start closed.
+      defaultOpen={card.status === "CONFIRMED" || card.status === "SETUP_FORMING"}
+      summary={
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span>{card.company || card.instrument_key}</span>
+          <span aria-hidden="true">·</span>
+          <span>{card.sector ?? "sector unknown"}</span>
+          <span aria-hidden="true">·</span>
+          <span>{card.horizon_sessions}-session horizon</span>
+          <span aria-hidden="true">·</span>
+          {prediction ? (
+            <span className="num">
+              up {pct(prediction.p_up)} / side {pct(prediction.p_side)} / down{" "}
+              {pct(prediction.p_down)} · n={prediction.n_samples}
+            </span>
+          ) : (
+            <span>no forecast</span>
+          )}
+          <span aria-hidden="true">·</span>
+          <span>market {card.confirmation}</span>
         </span>
       }
-      description={card.company || undefined}
-      actions={
-        card.freshness.stale ? <Badge tone="warn">stale data</Badge> : <Badge>live inputs</Badge>
+      badge={
+        <>
+          <Badge tone={STATUS_TONE[card.status] ?? "neutral"}>{card.status}</Badge>
+          {card.freshness.stale ? <Badge tone="warn">stale data</Badge> : null}
+        </>
       }
+      bodyClassName="flex flex-col"
     >
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-4 py-2">
+        <SymbolLink symbol={card.symbol} />
+        <span className="font-mono text-[11px] text-fg-2">{card.instrument_key}</span>
+        <span className="text-[11px] text-fg-2">{card.asset}</span>
+        <span className="ml-auto text-[11px] text-fg-2">
+          {card.freshness.stale ? "inputs are stale" : "live inputs"}
+        </span>
+      </div>
+      <div className="grid gap-4 p-4 lg:grid-cols-2">
         <div>
           <h4 className="mb-1 text-[11px] tracking-wide text-fg-2 uppercase">Forecast</h4>
           {prediction === null ? (
@@ -293,7 +321,7 @@ function CandidateCard({ card }: { card: Candidate }) {
         </div>
       </div>
 
-      <div className="mt-3">
+      <div className="border-t border-line px-4 py-3">
         <h4 className="mb-1 text-[11px] tracking-wide text-fg-2 uppercase">
           Catalysts ({card.events.length})
         </h4>
@@ -306,7 +334,7 @@ function CandidateCard({ card }: { card: Candidate }) {
           <EventBlock key={event.event_id} event={event} />
         ))}
       </div>
-    </Panel>
+    </Collapsible>
   );
 }
 
@@ -387,13 +415,21 @@ export default function Research() {
       </Toolbar>
 
       {research.isLoading ? (
-        <Panel title="Research" description="Loading the latest published run…">
-          <p className="text-[12px] text-fg-2">Reading the snapshot written by scripts/run_research.py.</p>
+        <Panel title="Research" description="Reading the latest published run">
+          <Skeleton rows={4} className="px-4 py-4" />
         </Panel>
       ) : null}
       {research.isError ? (
         <Panel title="Research unavailable">
-          <p className="text-[12px] text-crit-fg">{String(research.error)}</p>
+          <div className="flex flex-col gap-2.5 p-4">
+            <ErrorState message={describeError(research.error)} />
+            <p className="text-xs leading-relaxed text-fg-2">
+              This screen only reads the snapshot that{" "}
+              <code className="font-mono text-fg-1">scripts/run_research.py</code> publishes; it
+              never triggers a run. If the launch token has expired, reopen the console from the
+              link the server printed when it started.
+            </p>
+          </div>
         </Panel>
       ) : null}
 

@@ -9,6 +9,7 @@ import { duration } from "../../lib/format";
 import { Icon } from "../../shell/icons";
 import { Badge } from "../../ui/Badge";
 import { EmptyState, ErrorState, Panel, Skeleton } from "../../ui/Panel";
+import { describeError } from "../../ui/QueryState";
 import { Pct, Price } from "../../ui/Num";
 import { Segmented } from "../../ui/Segmented";
 
@@ -76,7 +77,7 @@ export function Watchlist({
 
       {error ? (
         <div className="p-3">
-          <ErrorState message={`Could not load the watchlist: ${error instanceof Error ? error.message : "request failed"}`} />
+          <ErrorState message={`Could not load the watchlist: ${describeError(error)}`} />
         </div>
       ) : loading && rows.length === 0 ? (
         <div className="p-4">

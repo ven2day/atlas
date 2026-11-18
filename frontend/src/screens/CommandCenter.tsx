@@ -1,6 +1,10 @@
 // 1. Command Center: the session, the books, the risk headroom, open positions, today's decisions
 // and the alerts. Every number is a server projection - the UI never adds money up - and rows open
 // the Decision Inspector.
+//
+// Hierarchy: the summary tiles and the session track are always visible, because they answer
+// "is anything happening and is anything wrong". The long lists (decisions, alerts) are cards that
+// say what they hold before you open them, and alerts open themselves when something is warning.
 
 import { useQuery } from "@tanstack/react-query";
 import { createColumnHelper } from "@tanstack/react-table";
@@ -15,11 +19,13 @@ import { useUi } from "../lib/ui";
 import { Icon } from "../shell/icons";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
+import { Collapsible } from "../ui/Collapsible";
 import { DataTable, type Columns } from "../ui/DataTable";
 import { Meter } from "../ui/Meter";
 import { Money, Pct, Price, Qty, TimeIST } from "../ui/Num";
 import { Page, PageHeader } from "../ui/PageHeader";
-import { Empty, Panel } from "../ui/Panel";
+import { Panel } from "../ui/Panel";
+import { QueryGate } from "../ui/QueryState";
 import { StatCard } from "../ui/Stat";
 import { BookPicker, DISPOSITION, SymbolLink, useSessionDay } from "./common";
 
@@ -47,8 +53,9 @@ function SessionTrack() {
   const steps = summary?.schedule ?? [];
   if (!steps.length) {
     return (
-      <p className="px-4 py-1 text-sm text-fg-2">
-        No session today (a holiday or a weekend). The engine still serves the last recorded state.
+      <p className="px-4 py-3 text-sm text-fg-2">
+        No session today (a holiday or a weekend). The engine still serves the last recorded state,
+        so the books and positions below are the most recent ones on record.
       </p>
     );
   }
@@ -133,14 +140,27 @@ function BooksCard() {
       description={valuation === "live" ? "Valued live, this tick" : valuation === "last_mark" ? "Valued from the last mark" : "No valuation yet"}
       bodyClassName="overflow-x-auto"
     >
-      <DataTable
-        label="Books"
+      <QueryGate
+        isLoading={books.isLoading}
+        isError={books.isError}
+        error={books.error}
         data={rows}
-        columns={BOOK_COLUMNS}
-        loading={books.isLoading}
-        getRowId={(r) => r.book_id}
-        empty="No books configured."
-      />
+        isEmpty={(r) => r.length === 0}
+        emptyTitle="No books configured"
+        emptyHint="Books come from src/config/experiment.yaml. Run a paper session and they appear here."
+        className="p-4"
+        skeletonRows={3}
+      >
+        {(data) => (
+          <DataTable
+            label="Books"
+            data={data}
+            columns={BOOK_COLUMNS}
+            getRowId={(r) => r.book_id}
+            empty="No books configured."
+          />
+        )}
+      </QueryGate>
     </Panel>
   );
 }
@@ -163,53 +183,64 @@ function RiskCard() {
     refetchInterval: 10_000,
   });
   const view = risk.data?.books[0];
-  const global = view?.kill_switches.find((k) => k.scope === "global");
-  const tripped = !!global && global.state !== "ARMED";
   return (
     <Panel
       title="Risk headroom"
       description="How much of each limit is used, by the RiskEngine's own definition"
       actions={<BookPicker value={book} onChange={setBook} />}
     >
-      {risk.error ? (
-        <Empty className="text-warn">Could not load the risk view.</Empty>
-      ) : !view ? (
-        <Empty>{risk.isLoading ? "Loading…" : "No risk view."}</Empty>
-      ) : (
-        <div className="flex flex-col gap-4 p-4">
-          <div className="flex flex-col gap-3">
-            {view.utilisation.map((u) => (
-              <Meter key={u.key} label={u.label} fraction={u.fraction} detail={usageDetail(u)} />
-            ))}
-          </div>
-          <div
-            className={cx(
-              "flex flex-wrap items-center gap-2 rounded-md border px-3 py-2.5",
-              tripped ? "border-warn bg-warn-soft" : "border-line bg-bg-2",
-            )}
-          >
-            <Icon name="risk" size={16} className={tripped ? "text-warn" : "text-fg-2"} />
-            <span className="text-sm text-fg-1">Kill switch</span>
-            <Badge tone={!global || global.state === "ARMED" ? "neutral" : undefined}>
-              {global ? (global.state === "HALT_NEW" ? "HALTED" : global.state) : "ARMED"}
-            </Badge>
-            {global && global.state !== "ARMED" && <span className="min-w-0 flex-1 truncate text-xs text-fg-2">{global.reason}</span>}
-            <span className="ml-auto flex items-center gap-2">
-              <Button size="xs" variant="danger" onClick={() => setHalt(true)}>
-                HALT
-              </Button>
-              <Button size="xs" variant="ghost" onClick={() => navigate("/risk")}>
-                Risk centre
-              </Button>
-            </span>
-          </div>
-          <p className="text-2xs text-fg-2">
-            {view.valuation === "live"
-              ? "Live: 100% is where the check blocks an order."
-              : "From the stored state and the last mark - heat and sector limits need a running session."}
-          </p>
-        </div>
-      )}
+      <QueryGate
+        isLoading={risk.isLoading}
+        isError={risk.isError}
+        error={risk.error}
+        data={view}
+        emptyTitle="No risk view for this book"
+        emptyHint="The risk view appears once the engine has recorded a session. Run a paper session or replay a recorded day."
+        className="p-4"
+        skeletonRows={5}
+      >
+        {(bookView) => {
+          const bookGlobal = bookView.kill_switches.find((k) => k.scope === "global");
+          const bookTripped = !!bookGlobal && bookGlobal.state !== "ARMED";
+          return (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3">
+                {bookView.utilisation.map((u) => (
+                  <Meter key={u.key} label={u.label} fraction={u.fraction} detail={usageDetail(u)} />
+                ))}
+              </div>
+              <div
+                className={cx(
+                  "flex flex-wrap items-center gap-2 rounded-md border px-3 py-2.5",
+                  bookTripped ? "border-warn bg-warn-soft" : "border-line bg-bg-2",
+                )}
+              >
+                <Icon name="risk" size={16} className={bookTripped ? "text-warn" : "text-fg-2"} />
+                <span className="text-sm text-fg-1">Kill switch</span>
+                <Badge tone={!bookGlobal || bookGlobal.state === "ARMED" ? "neutral" : undefined}>
+                  {bookGlobal ? (bookGlobal.state === "HALT_NEW" ? "HALTED" : bookGlobal.state) : "ARMED"}
+                </Badge>
+                {bookGlobal && bookGlobal.state !== "ARMED" && (
+                  <span className="min-w-0 flex-1 truncate text-xs text-fg-2">{bookGlobal.reason}</span>
+                )}
+                <span className="ml-auto flex items-center gap-2">
+                  <Button size="xs" variant="danger" onClick={() => setHalt(true)}>
+                    HALT
+                  </Button>
+                  <Button size="xs" variant="ghost" onClick={() => navigate("/risk")}>
+                    Risk centre
+                  </Button>
+                </span>
+              </div>
+              <p className="text-2xs text-fg-2">
+                {bookView.valuation === "live"
+                  ? "Live: 100% is where the check blocks an order."
+                  : "From the stored state and the last mark - heat and sector limits need a running session."}
+              </p>
+            </div>
+          );
+        }}
+      </QueryGate>
     </Panel>
   );
 }
@@ -234,11 +265,7 @@ function PositionsCard() {
   const [book, setBook] = useState<string | undefined>(undefined);
   const navigate = useNavigate();
   const { data: summary } = useSummary();
-  const positions = useQuery({
-    queryKey: keys.positions(book),
-    queryFn: ({ signal }) => get("/api/positions", { query: { book }, signal }),
-    refetchInterval: 10_000,
-  });
+  const positions = useOpenPositions();
   return (
     <Panel
       title="Open positions"
@@ -255,7 +282,11 @@ function PositionsCard() {
         getRowId={(r) => `${r.book_id}|${r.instrument_key}|${r.product}`}
         onRowClick={(r) => r.entry_decision_id && navigate(`/decisions/${r.entry_decision_id}`)}
         rowLabel={(r) => `${r.book_id} ${r.symbol}: open the entry decision`}
-        empty={summary?.market_open ? "No open positions." : "No open positions. The market is closed."}
+        empty={
+          summary?.market_open
+            ? "No open positions. Entries are proposed once per day, inside the 09:20-09:45 entry window."
+            : "No open positions, and the market is closed. Positions are CNC, so any held position would still be listed here."
+        }
       />
     </Panel>
   );
@@ -300,32 +331,42 @@ function TodaysDecisions() {
       bodyClassName="max-h-[420px] overflow-auto"
       scrollable
     >
-      {lines.length === 0 ? (
-        <Empty>{decisions.isLoading ? "Loading…" : "No signals today. Decisions run once, inside the entry window."}</Empty>
-      ) : (
-        <ul className="divide-y divide-line">
-          {lines.map((l) => (
-            <li key={l.signal_id}>
-              <button
-                type="button"
-                onClick={() => navigate(`/decisions/${l.decision_id}`)}
-                className="flex w-full flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5 text-left transition-colors duration-150 hover:bg-bg-2"
-              >
-                <span className="num w-12 shrink-0 text-xs text-fg-2">{hhmmIST(l.ts)}</span>
-                <span className="w-24 shrink-0 truncate text-sm font-medium text-fg-0">{l.symbol}</span>
-                <span className="w-32 shrink-0 truncate text-xs text-fg-1">{l.strategy}</span>
-                <span className="flex min-w-0 flex-1 flex-wrap gap-1">
-                  {l.books.map((b) => (
-                    <Badge key={b.book_id} size="sm" tone={b.disposition === "submitted" ? "neutral" : undefined} title={b.detail || b.disposition}>
-                      {`${b.book_id} ${DISPOSITION[b.disposition] ?? b.disposition}`}
-                    </Badge>
-                  ))}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <QueryGate
+        isLoading={decisions.isLoading}
+        isError={decisions.isError}
+        error={decisions.error}
+        data={lines}
+        isEmpty={(l) => l.length === 0}
+        emptyTitle="No signals today"
+        emptyHint="The engine runs one decision cycle per trading day, inside the 09:20-09:45 entry window. On a holiday or weekend there are none."
+        className="px-4 py-4"
+        skeletonRows={4}
+      >
+        {(rows) => (
+          <ul className="divide-y divide-line">
+            {rows.map((l) => (
+              <li key={l.signal_id}>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/decisions/${l.decision_id}`)}
+                  className="flex w-full flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5 text-left transition-colors duration-150 hover:bg-bg-2"
+                >
+                  <span className="num w-12 shrink-0 text-xs text-fg-2">{hhmmIST(l.ts)}</span>
+                  <span className="w-24 shrink-0 truncate text-sm font-medium text-fg-0">{l.symbol}</span>
+                  <span className="w-32 shrink-0 truncate text-xs text-fg-1">{l.strategy}</span>
+                  <span className="flex min-w-0 flex-1 flex-wrap gap-1">
+                    {l.books.map((b) => (
+                      <Badge key={b.book_id} size="sm" tone={b.disposition === "submitted" ? "neutral" : undefined} title={b.detail || b.disposition}>
+                        {`${b.book_id} ${DISPOSITION[b.disposition] ?? b.disposition}`}
+                      </Badge>
+                    ))}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </QueryGate>
     </Panel>
   );
 }
@@ -360,30 +401,56 @@ function useTodaySignals() {
   });
 }
 
-function AlertsCard() {
+function AlertsCard({ warningCount }: { warningCount: number }) {
   const alerts = useAlerts();
   const rows = alerts.data ?? [];
+  const worst = rows.find((a) => a.level === "CRITICAL")?.level ?? (warningCount > 0 ? "WARNING" : null);
   return (
-    <Panel title="Alerts" description="Newest first, from the engine's own alert stream" bodyClassName="max-h-[420px] overflow-auto" scrollable>
-      {rows.length === 0 ? (
-        <Empty>{alerts.isLoading ? "Loading…" : "No alerts."}</Empty>
-      ) : (
-        <ul className="divide-y divide-line">
-          {rows.map((a) => (
-            <li key={a.seq} className="flex flex-wrap items-start gap-x-3 gap-y-1 px-4 py-2.5">
-              <TimeIST value={a.ts} className="w-16 shrink-0 text-xs text-fg-2" />
-              <Badge size="sm" tone={a.level === "INFO" ? "neutral" : a.level === "CRITICAL" ? "crit" : "warn"}>
-                {a.level}
-              </Badge>
-              <span className="w-44 shrink-0 truncate font-mono text-2xs text-fg-1" title={a.key}>
-                {a.key}
-              </span>
-              <span className="min-w-0 flex-1 break-words text-sm text-fg-0">{a.message}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Panel>
+    <Collapsible
+      title="Alerts"
+      summary="Newest first, from the engine's own alert stream (the last 100)"
+      // A warning opens itself: an alert the operator has to discover is not an alert.
+      defaultOpen={warningCount > 0}
+      badge={
+        rows.length === 0 ? (
+          <Badge tone="neutral">quiet</Badge>
+        ) : (
+          <Badge tone={worst === "CRITICAL" ? "crit" : warningCount > 0 ? "warn" : "neutral"}>
+            {warningCount > 0 ? `${warningCount} needing attention` : `${rows.length} info`}
+          </Badge>
+        )
+      }
+      bodyClassName="max-h-[420px] overflow-auto"
+    >
+      <QueryGate
+        isLoading={alerts.isLoading}
+        isError={alerts.isError}
+        error={alerts.error}
+        data={rows}
+        isEmpty={(r) => r.length === 0}
+        emptyTitle="No alerts"
+        emptyHint="Nothing has been flagged. Feed outages, stale quotes, risk breaches and kill-switch changes all arrive here."
+        className="px-4 py-4"
+        skeletonRows={3}
+      >
+        {(items) => (
+          <ul className="divide-y divide-line">
+            {items.map((a) => (
+              <li key={a.seq} className="flex flex-wrap items-start gap-x-3 gap-y-1 px-4 py-2.5">
+                <TimeIST value={a.ts} className="w-16 shrink-0 text-xs text-fg-2" />
+                <Badge size="sm" tone={a.level === "INFO" ? "neutral" : a.level === "CRITICAL" ? "crit" : "warn"}>
+                  {a.level}
+                </Badge>
+                <span className="w-44 shrink-0 truncate font-mono text-2xs text-fg-1" title={a.key}>
+                  {a.key}
+                </span>
+                <span className="min-w-0 flex-1 break-words text-sm text-fg-0">{a.message}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </QueryGate>
+    </Collapsible>
   );
 }
 
@@ -397,6 +464,7 @@ export default function CommandCenter() {
   const signals = useTodaySignals();
   const signalCount = useMemo(() => group(signals.data ?? []).length, [signals.data]);
   const alertCount = (alerts.data ?? []).filter((a) => a.level !== "INFO").length;
+  const valuation = summary?.books[0]?.valuation;
 
   return (
     <Page>
@@ -411,6 +479,16 @@ export default function CommandCenter() {
           </span>
         }
       />
+
+      {valuation === "last_mark" && (
+        <p className="flex items-start gap-2 rounded-md border border-warn bg-warn-soft px-3 py-2 text-xs leading-relaxed text-warn">
+          <Icon name="clock" size={14} className="mt-0.5 shrink-0" />
+          <span>
+            Valuations come from the last recorded mark, not a live quote. Start a session to see
+            live figures; the numbers below are still the most recent ones on record.
+          </span>
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
@@ -434,7 +512,11 @@ export default function CommandCenter() {
         <StatCard
           label="Alerts"
           size="sm"
-          value={<span className={alertCount > 0 ? "text-warn" : undefined}><Qty value={alertCount} /></span>}
+          value={
+            <span className={alertCount > 0 ? "text-warn" : undefined}>
+              <Qty value={alertCount} />
+            </span>
+          }
           hint={alertCount > 0 ? "warning or worse, of the last 100" : "nothing to attend to"}
         />
       </div>
@@ -452,7 +534,7 @@ export default function CommandCenter() {
 
       <PositionsCard />
 
-      <AlertsCard />
+      <AlertsCard warningCount={alertCount} />
     </Page>
   );
 }
