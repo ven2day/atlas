@@ -514,7 +514,12 @@ export default function Research() {
                   each catalyst, so it fills in as the horizon passes.
                 </p>
               ) : (
-                <div className="overflow-x-auto">
+                <div
+                  className="overflow-x-auto"
+                  tabIndex={0}
+                  role="region"
+                  aria-label="Event study: abnormal return by event type, direction and horizon"
+                >
                   <table className="w-full text-[12px]">
                     <thead>
                       <tr className="text-fg-2 text-left">
@@ -558,7 +563,12 @@ export default function Research() {
       >
         {wf?.available ? (
           <>
-            <div className="overflow-x-auto">
+            <div
+              className="overflow-x-auto"
+              tabIndex={0}
+              role="region"
+              aria-label="Walk-forward forecast quality by approach"
+            >
               <table className="w-full text-[12px]">
                 <thead>
                   <tr className="text-fg-2 text-left">
@@ -593,7 +603,12 @@ export default function Research() {
               </table>
             </div>
             {wf.comparisons.length > 0 ? (
-              <div className="mt-3 overflow-x-auto">
+              <div
+                className="mt-3 overflow-x-auto"
+                tabIndex={0}
+                role="region"
+                aria-label="Paired comparisons against each baseline"
+              >
                 <table className="w-full text-[12px]">
                   <thead>
                     <tr className="text-fg-2 text-left">

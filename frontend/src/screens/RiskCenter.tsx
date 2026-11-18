@@ -78,7 +78,9 @@ function Switches({ view }: { view: BookRisk }) {
     ? view.kill_switches
     : [{ scope: "global", name: "global", state: "ARMED", reason: "never tripped", actor: "—", since: null }];
   return (
-    <div className="overflow-x-auto">
+    // No overflow here on purpose: the enclosing Panel is the scroll container and carries the
+    // keyboard focus, so a nested scroller cannot strand the table from keyboard users.
+    <div>
       <table className="w-full min-w-[640px] border-collapse text-sm">
         <thead>
           <tr className="border-b border-line-strong bg-bg-2 text-left text-2xs uppercase tracking-wide text-fg-2">
@@ -210,7 +212,7 @@ export default function RiskCenter() {
           </QueryGate>
         </Panel>
 
-        <Panel title={`Kill switches · book ${book ?? ""}`} description="Every switch that can stop this book, and who set it" bodyClassName="overflow-x-auto">
+        <Panel title={`Kill switches · book ${book ?? ""}`} description="Every switch that can stop this book, and who set it" bodyClassName="overflow-x-auto" scrollable>
           {view ? <Switches view={view} /> : <Empty>No risk view for this book.</Empty>}
         </Panel>
 

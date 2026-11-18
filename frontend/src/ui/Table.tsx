@@ -10,6 +10,7 @@ export function Table({
   minWidth,
   className,
   footer,
+  label,
 }: {
   head: ReactNode[];
   rows: ReactNode[][];
@@ -18,9 +19,18 @@ export function Table({
   minWidth?: number;
   className?: string;
   footer?: ReactNode;
+  /** Names the scroll container, so a keyboard or screen-reader user knows what they are scrolling. */
+  label?: string;
 }) {
   return (
-    <div className={cx("w-full overflow-x-auto", className)}>
+    // The wrapper is a scroll container by construction, so it must be reachable by keyboard:
+    // a region that only scrolls with the mouse traps content for keyboard users (WCAG 2.1.1).
+    <div
+      className={cx("w-full overflow-x-auto", className)}
+      tabIndex={0}
+      role={label ? "region" : undefined}
+      aria-label={label}
+    >
       <table className="w-full border-collapse text-sm" style={minWidth ? { minWidth } : undefined}>
         <thead>
           <tr className="border-b border-line-strong bg-bg-2 text-left text-2xs uppercase tracking-wide text-fg-2">

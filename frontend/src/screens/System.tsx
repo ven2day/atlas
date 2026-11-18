@@ -118,6 +118,7 @@ export default function System() {
           {system?.last_reconcile.length ? (
             <Table
               minWidth={720}
+              label="Reconciliation of the OMS against the broker, by book"
               head={["Book", "Scope", "State", "At (IST)", "Differences"]}
               rows={system.last_reconcile.map((r) => [
                 <span key="b" className="font-medium">{r.book_id}</span>,
