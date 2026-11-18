@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, date, datetime, time, timedelta
@@ -316,10 +317,9 @@ class ResearchStore:
     def begin_import(
         self, *, source: str, range_from: date, range_to: date, symbols: Sequence[str]
     ) -> str:
-        import_id = hashlib.sha256(
-            f"{source}|{range_from}|{range_to}|{','.join(sorted(symbols))}|"
-            f"{datetime.now(UTC).isoformat()}".encode()
-        ).hexdigest()[:24]
+        # Import IDs identify attempts, not requests. Timestamp-derived IDs can collide on
+        # platforms whose wall clock has coarser resolution when retries happen quickly.
+        import_id = uuid.uuid4().hex[:24]
         self._write(
             [
                 (
