@@ -14,6 +14,7 @@ import { SelectInput, TextInput } from "../ui/Input";
 import { TimeIST } from "../ui/Num";
 import { Page, PageHeader } from "../ui/PageHeader";
 import { Empty, Panel } from "../ui/Panel";
+import { QueryGate } from "../ui/QueryState";
 import { StatCard } from "../ui/Stat";
 import { Table } from "../ui/Table";
 
@@ -117,6 +118,7 @@ export default function System() {
           {system?.last_reconcile.length ? (
             <Table
               minWidth={720}
+              label="Reconciliation of the OMS against the broker, by book"
               head={["Book", "Scope", "State", "At (IST)", "Differences"]}
               rows={system.last_reconcile.map((r) => [
                 <span key="b" className="font-medium">{r.book_id}</span>,
@@ -204,20 +206,30 @@ export default function System() {
           </div>
         }
       >
-        {!logs.data?.length ? (
-          <Empty>{logs.isLoading ? "Loading…" : "No log lines match these filters."}</Empty>
-        ) : (
-          <ul className="divide-y divide-line font-mono text-2xs leading-relaxed">
-            {logs.data.map((l, i) => (
-              <li key={i} className="flex flex-wrap gap-x-3 gap-y-0.5 px-4 py-1.5">
-                <TimeIST value={l.ts} className="shrink-0 text-fg-2" />
-                <span className={cx("w-16 shrink-0", LEVEL_TONE[l.level] ?? "text-fg-2")}>{l.level}</span>
-                <span className="w-52 shrink-0 truncate text-fg-2" title={l.logger}>{l.logger}</span>
-                <span className="min-w-0 flex-1 break-words text-fg-0">{l.message}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <QueryGate
+          isLoading={logs.isLoading}
+          isError={logs.isError}
+          error={logs.error}
+          data={logs.data}
+          isEmpty={(rows) => rows.length === 0}
+          emptyTitle="No log lines match these filters"
+          emptyHint="Widen the level filter or clear the text box. These are the engine's own JSON lines from var/logs/, newest last."
+          className="p-4"
+          skeletonRows={6}
+        >
+          {(rows) => (
+            <ul className="divide-y divide-line font-mono text-2xs leading-relaxed">
+              {rows.map((l, i) => (
+                <li key={i} className="flex flex-wrap gap-x-3 gap-y-0.5 px-4 py-1.5">
+                  <TimeIST value={l.ts} className="shrink-0 text-fg-2" />
+                  <span className={cx("w-16 shrink-0", LEVEL_TONE[l.level] ?? "text-fg-2")}>{l.level}</span>
+                  <span className="w-52 shrink-0 truncate text-fg-2" title={l.logger}>{l.logger}</span>
+                  <span className="min-w-0 flex-1 break-words text-fg-0">{l.message}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </QueryGate>
       </Panel>
     </Page>
   );

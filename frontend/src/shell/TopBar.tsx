@@ -68,7 +68,7 @@ export function TopBar() {
   const { data: summary } = useSummary();
   const { data: system } = useSystem();
   const { data: config } = useConfig();
-  const { halt, setHalt } = useUi();
+  const { halt, setHalt, setNavOpen } = useUi();
   const day = sessionDay(summary?.now);
   const spend = useQuery({
     queryKey: keys.aiSpend({ group_by: "day", since: day, until: day }),
@@ -87,7 +87,15 @@ export function TopBar() {
 
   return (
     <header className="z-30 shrink-0 border-b border-line bg-bg-1">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 sm:px-6">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2.5 sm:px-5">
+        <button
+          type="button"
+          onClick={() => setNavOpen(true)}
+          aria-label="Open navigation"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-line bg-bg-2 text-fg-1 transition-colors duration-150 hover:text-fg-0 lg:hidden"
+        >
+          <Icon name="menu" size={18} />
+        </button>
         <Link to="/" className="flex shrink-0 items-center gap-2.5 rounded-md" aria-label="RakshaQuant home">
           <BrandMark />
           <span className="text-base font-semibold tracking-tight text-fg-0">RakshaQuant</span>

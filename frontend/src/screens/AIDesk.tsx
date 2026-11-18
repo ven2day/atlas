@@ -14,6 +14,7 @@ import { DataTable, type Columns } from "../ui/DataTable";
 import { Money, TimeIST } from "../ui/Num";
 import { Page, PageHeader } from "../ui/PageHeader";
 import { Empty, EmptyState, Panel } from "../ui/Panel";
+import { QueryGate } from "../ui/QueryState";
 import { StatCard } from "../ui/Stat";
 import { Table } from "../ui/Table";
 import { useSessionDay } from "./common";
@@ -103,14 +104,23 @@ export default function AIDesk() {
       </div>
 
       <Panel title="Roles and models" description="Primary first, then the fallbacks each role degrades to">
-        {!models.data?.length ? (
-          <Empty>{models.isLoading ? "Loading…" : "No LLM roles."}</Empty>
-        ) : (
+        <QueryGate
+          isLoading={models.isLoading}
+          isError={models.isError}
+          error={models.error}
+          data={models.data}
+          isEmpty={(roles) => roles.length === 0}
+          emptyTitle="No LLM roles configured"
+          emptyHint="Set LLM_ROLE_VETO (and optionally LLM_ROLE_REVIEW / LLM_ROLE_LABEL) in .env. Until a role is configured every book trades like book A, with no advisor to veto it."
+          className="p-4"
+          skeletonRows={4}
+        >
+          {(roles) => (
           <Table
             minWidth={980}
             head={["Role", "Model (primary first)", "Calls today", "Errors", "p50", "p95", "Last outcome", "Last call (IST)"]}
             align={["l", "l", "r", "r", "r", "r", "l", "l"]}
-            rows={models.data.flatMap((role) =>
+            rows={roles.flatMap((role) =>
               role.enabled
                 ? role.models.map((m, i) => [
                     <span key="r" className={i === 0 ? "font-medium text-fg-0" : "text-fg-2"}>{i === 0 ? role.role : ""}</span>,
@@ -138,7 +148,8 @@ export default function AIDesk() {
                   ],
             )}
           />
-        )}
+          )}
+        </QueryGate>
       </Panel>
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-2">

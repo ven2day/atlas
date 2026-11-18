@@ -16,6 +16,7 @@ import { Button } from "../ui/Button";
 import { Bps, DateIST, Money, Pct, Price, Qty, TimeIST } from "../ui/Num";
 import { Page } from "../ui/PageHeader";
 import { Empty, EmptyState, ErrorState, Field, FieldGrid, Panel } from "../ui/Panel";
+import { describeError } from "../ui/QueryState";
 import { Table } from "../ui/Table";
 import { Timeline, type Step } from "../ui/Timeline";
 import { DecisionLink, DISPOSITION } from "./common";
@@ -456,7 +457,7 @@ export default function DecisionInspector() {
             hint={`No decision recorded with id ${id}. It may predate this event store, or the link may be mistyped.`}
           />
         ) : (
-          <ErrorState message={`Could not load this decision: ${lineage.error instanceof Error ? lineage.error.message : "request failed"}`} />
+          <ErrorState message={`Could not load this decision: ${describeError(lineage.error)}`} />
         )}
       </Page>
     );

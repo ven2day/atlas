@@ -13,11 +13,13 @@ import { Icon } from "../shell/icons";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Chart } from "../ui/Chart";
+import { Collapsible } from "../ui/Collapsible";
 import { ConfirmTyped } from "../ui/Dialog";
 import { Meter } from "../ui/Meter";
 import { DateIST, Money, TimeIST } from "../ui/Num";
 import { Page, PageHeader } from "../ui/PageHeader";
-import { Empty, EmptyState, ErrorState, Panel } from "../ui/Panel";
+import { Empty, EmptyState, Panel } from "../ui/Panel";
+import { QueryGate } from "../ui/QueryState";
 import { StatCard } from "../ui/Stat";
 import { useToasts } from "../ui/Toast";
 import { BookPicker } from "./common";
@@ -76,7 +78,9 @@ function Switches({ view }: { view: BookRisk }) {
     ? view.kill_switches
     : [{ scope: "global", name: "global", state: "ARMED", reason: "never tripped", actor: "—", since: null }];
   return (
-    <div className="overflow-x-auto">
+    // No overflow here on purpose: the enclosing Panel is the scroll container and carries the
+    // keyboard focus, so a nested scroller cannot strand the table from keyboard users.
+    <div>
       <table className="w-full min-w-[640px] border-collapse text-sm">
         <thead>
           <tr className="border-b border-line-strong bg-bg-2 text-left text-2xs uppercase tracking-wide text-fg-2">
@@ -183,27 +187,32 @@ export default function RiskCenter() {
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-2">
         <Panel title="Limits in use" description="100% is where the check blocks an order">
-          {risk.error ? (
-            <div className="p-4">
-              <ErrorState message={`Could not load the risk view: ${risk.error instanceof Error ? risk.error.message : "request failed"}`} />
-            </div>
-          ) : !view ? (
-            <Empty>{risk.isLoading ? "Loading…" : "No risk view."}</Empty>
-          ) : (
-            <div className="flex flex-col gap-4 p-4">
-              {view.utilisation.map((u) => (
-                <Meter key={u.key} label={u.label} fraction={u.fraction} detail={usageDetail(u)} />
-              ))}
-              <p className="text-2xs leading-relaxed text-fg-2">
-                {view.valuation === "live"
-                  ? "Live, with the RiskEngine's own definitions."
-                  : "From the stored state and the last mark: heat and sector limits need a running session."}
-              </p>
-            </div>
-          )}
+          <QueryGate
+            isLoading={risk.isLoading}
+            isError={risk.isError}
+            error={risk.error}
+            data={view}
+            emptyTitle="No risk view for this book"
+            emptyHint="The risk view appears once the engine has recorded a session for this book. Run a paper session or replay a recorded day."
+            className="p-4"
+            skeletonRows={5}
+          >
+            {(bookView) => (
+              <div className="flex flex-col gap-4 p-4">
+                {bookView.utilisation.map((u) => (
+                  <Meter key={u.key} label={u.label} fraction={u.fraction} detail={usageDetail(u)} />
+                ))}
+                <p className="text-2xs leading-relaxed text-fg-2">
+                  {bookView.valuation === "live"
+                    ? "Live, with the RiskEngine's own definitions."
+                    : "From the stored state and the last mark: heat and sector limits need a running session."}
+                </p>
+              </div>
+            )}
+          </QueryGate>
         </Panel>
 
-        <Panel title={`Kill switches · book ${book ?? ""}`} description="Every switch that can stop this book, and who set it" bodyClassName="overflow-x-auto">
+        <Panel title={`Kill switches · book ${book ?? ""}`} description="Every switch that can stop this book, and who set it" bodyClassName="overflow-x-auto" scrollable>
           {view ? <Switches view={view} /> : <Empty>No risk view for this book.</Empty>}
         </Panel>
 
@@ -254,12 +263,13 @@ export default function RiskCenter() {
         </Panel>
       </div>
 
-      <Panel
+      <Collapsible
         title="Configured limits"
-        description={`Read-only, from the running configuration · hash ${risk.data?.limits_hash ?? "—"}`}
+        summary={`Read-only, from the running configuration · hash ${risk.data?.limits_hash ?? "—"}`}
+        badge={<Badge mono size="sm">{Object.keys(limits).length} limits</Badge>}
       >
         {Object.keys(limits).length === 0 ? (
-          <Empty>No limits published.</Empty>
+          <Empty>No limits are published. They come from src/config/limits.py and the RISK_* settings.</Empty>
         ) : (
           <dl className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-x-6 gap-y-3 p-4 text-sm">
             {Object.entries(limits)
@@ -278,7 +288,7 @@ export default function RiskCenter() {
               ))}
           </dl>
         )}
-      </Panel>
+      </Collapsible>
     </Page>
   );
 }

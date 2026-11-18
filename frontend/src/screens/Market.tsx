@@ -20,7 +20,8 @@ import { Button, LinkButton } from "../ui/Button";
 import { Chart } from "../ui/Chart";
 import { DateIST, Pct, Price, TimeIST } from "../ui/Num";
 import { Page, PageHeader } from "../ui/PageHeader";
-import { Empty, EmptyState, ErrorState, Field, FieldGrid, Panel, Skeleton } from "../ui/Panel";
+import { EmptyState, ErrorState, Field, FieldGrid, Panel, Skeleton } from "../ui/Panel";
+import { describeError } from "../ui/QueryState";
 import { Segmented, Toggle } from "../ui/Segmented";
 import { IndicatorPanel } from "./market/IndicatorPanel";
 import { Watchlist } from "./market/Watchlist";
@@ -324,7 +325,7 @@ export default function Market() {
               </div>
             ) : bars.error ? (
               <div className="p-4">
-                <ErrorState message={`Could not load the history: ${bars.error instanceof Error ? bars.error.message : "request failed"}`} />
+                <ErrorState message={`Could not load the history: ${describeError(bars.error)}`} />
               </div>
             ) : candles.length === 0 ? (
               <EmptyState
@@ -374,14 +375,17 @@ export default function Market() {
         description="Typed by the announcement model: type, direction and materiality, as recorded."
         actions={<Toggle checked={allEvents} onChange={setAllEvents}>All symbols</Toggle>}
       >
-        {events.error ? (
+        {events.isLoading ? (
+          <Skeleton rows={4} className="px-4 py-4" />
+        ) : events.isError ? (
           <div className="p-4">
-            <ErrorState message={`Could not load announcements: ${events.error instanceof Error ? events.error.message : "request failed"}`} />
+            <ErrorState message={`Could not load announcements: ${describeError(events.error)}`} />
           </div>
         ) : !events.data?.length ? (
-          <Empty>
-            No classified announcements{allEvents || !symbol ? "" : ` for ${symbol}`}. The feed is polled during a session.
-          </Empty>
+          <EmptyState
+            title={`No classified announcements${allEvents || !symbol ? "" : ` for ${symbol}`}`}
+            hint="The NSE announcements feed is polled during a session when ANNOUNCEMENTS_ENABLED=true and then typed by the decision model. Nothing has been classified yet."
+          />
         ) : (
           <ul className="divide-y divide-line">
             {events.data.map((e) => {
