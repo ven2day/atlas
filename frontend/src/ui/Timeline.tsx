@@ -7,6 +7,10 @@ export interface Step {
   title: ReactNode;
   meta?: ReactNode; // e.g. a time or a badge
   tone?: "neutral" | "warn" | "crit" | "accent";
+  /** One plain-language line under the title: what this step means for a trader. */
+  lead?: ReactNode;
+  /** Anchor id on the step's <li>, so the stage tracker can scroll to it. */
+  anchor?: string;
   children?: ReactNode;
 }
 
@@ -23,7 +27,7 @@ export function Timeline({ steps }: { steps: Step[] }) {
     <ol className="relative flex flex-col gap-3 pl-7">
       <span aria-hidden="true" className="absolute bottom-5 left-[10px] top-5 w-px bg-line-strong" />
       {steps.map((step) => (
-        <li key={step.id} className="relative">
+        <li key={step.id} id={step.anchor} className="relative scroll-mt-4">
           <span
             aria-hidden="true"
             className={cx("absolute -left-7 top-5 h-[21px] w-[21px] rounded-full border-2", DOT[step.tone ?? "neutral"])}
@@ -33,6 +37,7 @@ export function Timeline({ steps }: { steps: Step[] }) {
               <h3 className="text-sm font-semibold tracking-tight text-fg-0">{step.title}</h3>
               {step.meta && <div className="shrink-0 text-xs text-fg-2">{step.meta}</div>}
             </div>
+            {step.lead && <p className="mt-1 text-xs leading-relaxed text-fg-2">{step.lead}</p>}
             {step.children && <div className="mt-3 text-sm text-fg-1">{step.children}</div>}
           </div>
         </li>

@@ -1,20 +1,23 @@
-// 1. Command Center: the session, the books, the risk headroom, open positions, today's decisions
-// and the alerts. Every number is a server projection - the UI never adds money up - and rows open
-// the Decision Inspector.
+// 1. Command Center: what is happening right now, then the session, the books, the risk headroom,
+// open positions, today's decisions and the alerts. Every number is a server projection - the UI
+// never adds money up - and rows open the Decision Inspector.
 //
-// Hierarchy: the summary tiles and the session track are always visible, because they answer
-// "is anything happening and is anything wrong". The long lists (decisions, alerts) are cards that
-// say what they hold before you open them, and alerts open themselves when something is warning.
+// Hierarchy: the "Right now" panel answers a trader's first three questions (is the system
+// running, is the data fresh, does anything need me) and holds the session start/stop controls.
+// The summary tiles and the session track stay always visible; the long lists (decisions,
+// alerts) are cards that say what they hold before you open them, and alerts open themselves
+// when something is warning. The plain-language trading guide lives at the bottom, collapsed.
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 
-import { get, type Schemas } from "../api/client";
-import { keys, useSummary } from "../api/queries";
+import { get, post, type Schemas } from "../api/client";
+import { keys, useConfig, useSummary, useSystem } from "../api/queries";
+import { BOOKS, SESSION_STATES, STRATEGIES, dataFreshness } from "../lib/explain";
 import { cx } from "../lib/cx";
-import { hhmmIST, inrCompact, num, ratio } from "../lib/format";
+import { duration, hhmmIST, inrCompact, num, ratio } from "../lib/format";
 import { useUi } from "../lib/ui";
 import { Icon } from "../shell/icons";
 import { Badge } from "../ui/Badge";
@@ -27,6 +30,7 @@ import { Page, PageHeader } from "../ui/PageHeader";
 import { Panel } from "../ui/Panel";
 import { QueryGate } from "../ui/QueryState";
 import { StatCard } from "../ui/Stat";
+import { useToasts } from "../ui/Toast";
 import { BookPicker, DISPOSITION, SymbolLink, useSessionDay } from "./common";
 
 type Book = Schemas["BookSummary"];
@@ -34,6 +38,227 @@ type Comparison = Schemas["BookComparison"];
 type Position = Schemas["PositionRow"];
 type Usage = Schemas["Utilisation"];
 type DecisionRow = Schemas["DecisionRow"];
+
+// -- right now: session control, data freshness, attention ----------------------------------------
+
+/** Start/stop the paper session through the server's own controls. Read-only consoles refuse;
+ *  a start while one is running is a 409 the server names, and both are surfaced, not swallowed. */
+function SessionControl() {
+  const { data: summary } = useSummary();
+  const { data: config } = useConfig();
+  const client = useQueryClient();
+  const push = useToasts((s) => s.push);
+  const [busy, setBusy] = useState<string | null>(null);
+  const running = summary?.running ?? false;
+  const readOnly = config?.read_only ?? false;
+
+  const act = async (action: "paper" | "demo" | "stop") => {
+    setBusy(action);
+    try {
+      const result =
+        action === "stop"
+          ? await post("/api/session/stop", {})
+          : await post("/api/session/start", { demo: action === "demo" });
+      push({
+        level: "info",
+        title: `Session ${action === "stop" ? "stop" : "start"} ${result.outcome.replace("_", " ")}`,
+        body: result.detail,
+      });
+      void client.invalidateQueries();
+    } catch (e) {
+      push({
+        level: "warn",
+        title: "Session control refused",
+        body: e instanceof Error ? e.message : "the request failed",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (readOnly) {
+    return <span className="text-2xs text-fg-2">This console is read-only: session control is disabled.</span>;
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      {running ? (
+        <Button size="sm" variant="secondary" disabled={busy !== null} onClick={() => void act("stop")}
+                title="Cooperative: the engine finishes the step it is in, then stops">
+          <Icon name="stop" size={14} />
+          {busy === "stop" ? "Stopping…" : "Stop session"}
+        </Button>
+      ) : (
+        <>
+          <Button size="sm" variant="primary" disabled={busy !== null} onClick={() => void act("paper")}
+                  title="Start a paper session: real market data, simulated broker, no real orders">
+            <Icon name="play" size={14} />
+            {busy === "paper" ? "Starting…" : "Start paper session"}
+          </Button>
+          <Button size="sm" variant="secondary" disabled={busy !== null} onClick={() => void act("demo")}
+                  title="Replay the bundled recorded day through the real engine - no market connection">
+            {busy === "demo" ? "Starting…" : "Start demo replay"}
+          </Button>
+        </>
+      )}
+    </span>
+  );
+}
+
+function RightNow({ warningCount }: { warningCount: number }) {
+  const { data: summary } = useSummary();
+  const { data: system } = useSystem();
+  const ages = Object.entries(system?.quote_age_s ?? {}).sort((a, b) => a[1] - b[1]);
+  const freshest = ages[0];
+  const freshness = dataFreshness(freshest ? freshest[1] : null);
+  const state = summary?.session?.state ?? null;
+  const explained = state ? SESSION_STATES[state] : null;
+  const schedule = summary?.schedule ?? [];
+  const currentIndex = schedule.findIndex((s) => s.state === state);
+  const next = currentIndex >= 0 ? schedule[currentIndex + 1] : undefined;
+  const drift = (system?.last_reconcile ?? []).some((r) => !r.in_sync);
+  const halted = (summary?.books ?? []).filter((b) => b.kill_switch !== "ARMED");
+  const running = summary?.running ?? false;
+
+  const attention: { text: string; to?: string; link?: string }[] = [];
+  if (!running) {
+    attention.push({ text: "No session is running - quotes, signals and risk state stay frozen at the last record until one is started." });
+  }
+  if (freshness.state === "stale") {
+    attention.push({ text: `Market data is stale (${freshest ? duration(freshest[1]) : "—"} old): new entries are blocked until quotes are fresh again.`, to: "/system", link: "System health" });
+  } else if (freshness.state === "none" && running) {
+    attention.push({ text: "The session is running but no quote has arrived yet - waiting for the first poll.", to: "/system", link: "System health" });
+  }
+  for (const b of halted) {
+    attention.push({ text: `Book ${b.book_id}'s kill switch is ${b.kill_switch === "HALT_NEW" ? "halted (new entries blocked)" : b.kill_switch}.`, to: "/risk", link: "Risk centre" });
+  }
+  if (drift) {
+    attention.push({ text: "The OMS and the broker disagree (reconciliation drift) - entries stay blocked until it clears.", to: "/system", link: "System health" });
+  }
+  if (warningCount > 0) {
+    attention.push({ text: `${warningCount} warning(s) or worse in the alert stream - see Alerts below.` });
+  }
+
+  return (
+    <Panel
+      title="Right now"
+      description="Is the system running, is its data fresh, and does anything need you"
+      actions={<SessionControl />}
+      bodyClassName="flex flex-col gap-3 p-4"
+    >
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Badge tone={running ? "accent" : "neutral"}>{running ? "SESSION RUNNING" : "IDLE"}</Badge>
+        <span className="text-sm text-fg-0">
+          {explained ? `${explained.label}: ` : "No session: "}
+          <span className="text-fg-1">{explained ? explained.plain : "the engine serves the last recorded state; start a session to trade."}</span>
+        </span>
+        {next && (
+          <span className="text-xs text-fg-2">
+            Next: {SESSION_STATES[next.state]?.label ?? next.state} at <span className="num">{hhmmIST(next.at)}</span> IST
+          </span>
+        )}
+        <span
+          className={cx(
+            "ml-auto flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-2xs font-medium",
+            freshness.state === "live" && "border-accent-line bg-accent-soft text-accent-fg",
+            freshness.state === "delayed" && "border-line-strong bg-bg-2 text-fg-1",
+            freshness.state === "stale" && "border-warn bg-warn-soft text-warn",
+            freshness.state === "none" && "border-line bg-bg-2 text-fg-2",
+          )}
+          title={`${freshness.detail}${freshest ? ` Source: ${freshest[0]}, age ${duration(freshest[1])}.` : ""}`}
+        >
+          <Icon name="database" size={13} />
+          Data {freshness.label}
+          {freshest && freshness.state !== "none" && <span className="num">· {duration(freshest[1])} old</span>}
+        </span>
+      </div>
+      {attention.length > 0 ? (
+        <ul aria-label="Needs attention" className="flex flex-col gap-1.5">
+          {attention.map((a, i) => (
+            <li key={i} className="flex flex-wrap items-baseline gap-x-2 rounded-md border border-warn bg-warn-soft px-3 py-2 text-xs leading-relaxed text-warn">
+              <Icon name="alert" size={13} className="shrink-0" />
+              <span className="min-w-0 flex-1">{a.text}</span>
+              {a.to && a.link && (
+                <Link to={a.to} className="shrink-0 font-medium underline">
+                  {a.link}
+                </Link>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-fg-2">
+          All quiet: nothing needs attention. New signals appear on trading days inside the entry
+          window (09:20-09:45 IST); between sessions this screen shows the last recorded state.
+        </p>
+      )}
+    </Panel>
+  );
+}
+
+// -- the plain-language guide ----------------------------------------------------------------------
+
+const GUIDE_STEPS: { title: string; text: string; to: string; link: string }[] = [
+  { title: "Market data arrives", text: "Quotes and settled daily bars stream in (YFinance or Dhan on paper; a recorded tape in the demo). The top bar always shows how fresh the newest quote is - LIVE, DELAYED, STALE or NO DATA - and stale data blocks new entries instead of trading on old prices.", to: "/system", link: "System" },
+  { title: "A strategy proposes a signal", text: "Once per trading day, inside the 09:20-09:45 IST entry window, the enabled strategies scan the universe on settled bars. A signal is a proposal with its reasons attached - not an order.", to: "/decisions", link: "Decisions" },
+  { title: "AI reviewers may veto (books B and C)", text: "Book A trades the raw strategy. Books B and C each add an AI reviewer that can only veto an entry - it never changes price, size, stop or target. 'No opinion' (abstain) is not an approval: the deterministic decision simply stands.", to: "/ai", link: "AI desk" },
+  { title: "Risk checks decide", text: "Every proposed order passes the RiskEngine's hard limits: per-trade risk, exposure, sector caps, cash, data freshness, kill switches and the announcement calendar. A risk rejection is a rule, not an AI opinion; orders can also be resized to fit.", to: "/risk", link: "Risk centre" },
+  { title: "The order goes to the simulated broker", text: "Approved entries become orders with a protective stop resting at the broker. This is paper trading: the broker is simulated, and every fill, rejection and expiry is recorded with its price lineage (decision price, arrival price, fill price).", to: "/blotter", link: "Blotter" },
+  { title: "The position is managed to its exit", text: "Open positions are watched every tick: the stop caps the loss, the target books the profit, and a time exit closes anything still open after 10 sessions. Closed trades show their net P&L after charges.", to: "/blotter", link: "Blotter > Trades" },
+];
+
+function TradingGuide() {
+  return (
+    <Collapsible
+      title="How RakshaQuant trades (plain-language guide)"
+      summary="The six steps from a market tick to a closed position, what books A/B/C mean, and where to find each"
+      badge={<Badge size="sm" tone="neutral">start here</Badge>}
+    >
+      <div className="flex flex-col gap-5 p-4">
+        <ol className="flex flex-col gap-3">
+          {GUIDE_STEPS.map((s, i) => (
+            <li key={s.title} className="flex gap-3">
+              <span aria-hidden="true" className="num flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-accent-line bg-accent-soft text-xs font-semibold text-accent-fg">
+                {i + 1}
+              </span>
+              <span className="min-w-0">
+                <span className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="text-sm font-medium text-fg-0">{s.title}</span>
+                  <Link to={s.to} className="text-2xs text-accent-fg underline">{s.link}</Link>
+                </span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-fg-1">{s.text}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+        <div>
+          <h3 className="rq-label">The three books (a paired experiment, all paper)</h3>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {Object.entries(BOOKS).map(([id, b]) => (
+              <li key={id} className="text-xs leading-relaxed text-fg-1">
+                <span className="font-medium text-fg-0">{b.label}:</span> {b.plain}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h3 className="rq-label">The strategies</h3>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {Object.entries(STRATEGIES).map(([name, s]) => (
+              <li key={name} className="text-xs leading-relaxed text-fg-1">
+                <span className="font-mono text-fg-0">{name}</span> - {s.plain}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <p className="text-2xs leading-relaxed text-fg-2">
+          Everything here is paper trading against a simulated broker: no real order is ever
+          placed, and every number on every screen comes from a recorded event. Technical terms
+          keep their original names in tooltips and Details sections.
+        </p>
+      </div>
+    </Collapsible>
+  );
+}
 
 // -- session -----------------------------------------------------------------------------------
 
@@ -470,7 +695,7 @@ export default function CommandCenter() {
     <Page>
       <PageHeader
         title="Command"
-        description="The whole book at a glance: where the session is, how each paired book stands, what is open, and what the engine decided and flagged today."
+        description="The whole book at a glance: what is happening right now, where the session is, how each paired book stands, what is open, and what the engine decided and flagged today."
         actions={
           <span className="flex items-center gap-2 rounded-full border border-line bg-bg-1 px-3 py-1.5 text-xs text-fg-1">
             <Icon name="calendar" size={14} className="text-fg-2" />
@@ -479,6 +704,8 @@ export default function CommandCenter() {
           </span>
         }
       />
+
+      <RightNow warningCount={alertCount} />
 
       {valuation === "last_mark" && (
         <p className="flex items-start gap-2 rounded-md border border-warn bg-warn-soft px-3 py-2 text-xs leading-relaxed text-warn">
@@ -535,6 +762,8 @@ export default function CommandCenter() {
       <PositionsCard />
 
       <AlertsCard warningCount={alertCount} />
+
+      <TradingGuide />
     </Page>
   );
 }

@@ -1,6 +1,8 @@
-// 2. Decision Inspector (/decisions/:id): one decision's full lineage as a timeline - market
-// context → signal → each book's advisor → each book's risk decision → orders and fills → the
-// position's exit → the counterfactual. Everything shown is a recorded event.
+// 2. Decision Inspector (/decisions/:id): what happened to one decision, for a trader first and
+// an engineer second. The top of the page is the plain-language reading - a five-stage journey
+// (Signal -> AI review -> Risk check -> Order -> Position/Exit) and one outcome line per book -
+// all derived from recorded events by ./decisionSummary. Below it, the full technical timeline
+// keeps every event, price and model detail, with the most technical parts collapsible.
 
 import { useQuery } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
@@ -8,11 +10,13 @@ import { Link, useParams } from "react-router";
 
 import { ApiError, get, type Schemas } from "../api/client";
 import { keys } from "../api/queries";
+import { BOOKS, DISPOSITIONS } from "../lib/explain";
 import { cx } from "../lib/cx";
 import { num, symbolOf } from "../lib/format";
 import { Icon } from "../shell/icons";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
+import { Collapsible } from "../ui/Collapsible";
 import { Bps, DateIST, Money, Pct, Price, Qty, TimeIST } from "../ui/Num";
 import { Page } from "../ui/PageHeader";
 import { Empty, EmptyState, ErrorState, Field, FieldGrid, Panel } from "../ui/Panel";
@@ -20,6 +24,7 @@ import { describeError } from "../ui/QueryState";
 import { Table } from "../ui/Table";
 import { Timeline, type Step } from "../ui/Timeline";
 import { DecisionLink, DISPOSITION } from "./common";
+import { bookOutcomes, deriveStages, nextActions, type Stage } from "./decisionSummary";
 import {
   booksOf,
   data,
@@ -38,6 +43,92 @@ import {
 } from "./lineage";
 
 type Execution = Schemas["Execution"];
+
+// -- the plain-language summary ------------------------------------------------------------------
+
+const STAGE_TONE: Record<Stage["status"], { badge: "neutral" | "up" | "warn" | "accent"; label: string; card: string }> = {
+  done: { badge: "up", label: "done", card: "border-line bg-bg-2" },
+  blocked: { badge: "warn", label: "blocked", card: "border-warn bg-warn-soft" },
+  skipped: { badge: "neutral", label: "skipped", card: "border-line bg-bg-1" },
+  pending: { badge: "neutral", label: "not reached", card: "border-line bg-bg-1" },
+  active: { badge: "accent", label: "in progress", card: "border-accent-line bg-accent-soft" },
+};
+
+function StageTrack({ stages }: { stages: Stage[] }) {
+  const go = (anchor: string) => document.getElementById(anchor)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  return (
+    <ol aria-label="Decision journey" className="grid gap-2 lg:grid-cols-5">
+      {stages.map((s, i) => {
+        const tone = STAGE_TONE[s.status];
+        return (
+          <li key={s.id} className="min-w-0">
+            <button
+              type="button"
+              onClick={() => go(s.anchor)}
+              title={[`${s.title} (${tone.label}): ${s.headline}`, ...s.details].join("\n")}
+              className={cx(
+                "flex h-full w-full flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150 hover:border-fg-2",
+                tone.card,
+              )}
+            >
+              <span className="flex items-center gap-2">
+                <span aria-hidden="true" className="num flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-bg-0 text-2xs font-semibold text-fg-1">
+                  {i + 1}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-xs font-semibold tracking-tight text-fg-0">{s.title}</span>
+                <Badge size="sm" tone={tone.badge}>{tone.label}</Badge>
+              </span>
+              <span className="text-2xs leading-relaxed text-fg-1">{s.headline}</span>
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function WhatHappened({ lineage }: { lineage: Schemas["Lineage"] }) {
+  const stages = deriveStages(lineage);
+  const outcomes = bookOutcomes(lineage);
+  const actions = nextActions(lineage, outcomes);
+  return (
+    <Panel
+      title="What happened"
+      description="This decision in plain words. Every line comes from a recorded event; the technical timeline below holds the raw detail."
+      bodyClassName="flex flex-col gap-4 p-4"
+    >
+      <StageTrack stages={stages} />
+      <ul aria-label="Outcome by book" className="flex flex-col gap-2">
+        {outcomes.map((o) => (
+          <li key={o.book} className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-md border border-line bg-bg-1 px-3 py-2.5">
+            <span className="flex shrink-0 items-center gap-2">
+              <Badge tone={o.tone === "neutral" ? "neutral" : o.tone}>{`Book ${o.book}: ${o.label}`}</Badge>
+              {BOOKS[o.book] && (
+                <span className="hidden text-2xs text-fg-2 xl:inline" title={BOOKS[o.book]?.plain}>
+                  {BOOKS[o.book]?.label.replace(/^Book [A-C] - /, "")}
+                </span>
+              )}
+            </span>
+            <span className="min-w-0 flex-1 text-sm leading-relaxed text-fg-0">{o.sentence}</span>
+            <span className="w-full text-2xs text-fg-2 sm:w-auto sm:shrink-0">
+              <span className="font-medium text-fg-1">Next:</span> {o.next}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {actions.length > 0 && (
+        <div className="rounded-md border border-accent-line bg-accent-soft px-3 py-2.5">
+          <p className="text-xs font-semibold tracking-tight text-accent-fg">What to review or do next</p>
+          <ul className="mt-1.5 flex list-disc flex-col gap-1 pl-4 text-xs leading-relaxed text-fg-1">
+            {actions.map((a) => (
+              <li key={a}>{a}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Panel>
+  );
+}
 
 // -- the steps ---------------------------------------------------------------------------------
 
@@ -108,8 +199,13 @@ function Signals({ signals, dispositions }: { signals: SignalData[]; disposition
               .filter((d) => data<DispositionData>(d).signal_id === s.signal_id)
               .map((d) => {
                 const p = data<DispositionData>(d);
+                const explain = DISPOSITIONS[p.disposition]?.plain ?? "";
                 return (
-                  <Badge key={d.seq} tone={p.disposition === "submitted" ? "neutral" : undefined} title={p.detail}>
+                  <Badge
+                    key={d.seq}
+                    tone={p.disposition === "submitted" ? "neutral" : undefined}
+                    title={`${p.detail ? `${p.detail} — ` : ""}${explain}`}
+                  >
                     {`${d.book_id} ${DISPOSITION[p.disposition] ?? p.disposition}`}
                   </Badge>
                 );
@@ -168,39 +264,50 @@ function Advisors({ events, onEvidence }: { events: LineageEvent[]; onEvidence: 
                 ))}
               </ul>
             )}
-            {models.map((m, i) => (
-              <div key={i} className="mt-3">
-                <p className="font-mono text-2xs text-fg-2">
-                  {m.model}:{m.checkpoint} · {num(m.latency_ms, 0)} ms{m.escalated ? " · escalated" : ""}
-                  {m.calibrated ? " · calibrated" : " · uncalibrated"}
-                </p>
-                <div className="mt-1.5 rounded-md border border-line">
-                  <Table
-                    head={["Question", "Answer", "P(answer)"]}
-                    align={["l", "l", "r"]}
-                    rows={Object.entries(m.answers).map(([q, a]) => [
-                      <span key="q" className="font-mono text-xs">{q}</span>,
-                      String(a.value ?? "—"),
-                      <span key="p">{a.confidence != null ? num(a.confidence, 2) : "—"}</span>,
-                    ])}
-                  />
+            {(models.length > 0 || llm.length > 0) && (
+              <Collapsible
+                className="mt-3"
+                title="Model calls (metadata)"
+                summary={`${models.length} typed-model call(s), ${llm.length} LLM call(s): latencies, tokens, costs and the raw answers`}
+                badge={<Badge size="sm" tone="neutral">technical</Badge>}
+              >
+                <div className="flex flex-col gap-3 p-3">
+                  {models.map((m, i) => (
+                    <div key={i}>
+                      <p className="font-mono text-2xs text-fg-2">
+                        {m.model}:{m.checkpoint} · {num(m.latency_ms, 0)} ms{m.escalated ? " · escalated" : ""}
+                        {m.calibrated ? " · calibrated" : " · uncalibrated"}
+                      </p>
+                      <div className="mt-1.5 rounded-md border border-line">
+                        <Table
+                          head={["Question", "Answer", "P(answer)"]}
+                          align={["l", "l", "r"]}
+                          rows={Object.entries(m.answers).map(([q, a]) => [
+                            <span key="q" className="font-mono text-xs">{q}</span>,
+                            String(a.value ?? "—"),
+                            <span key="p">{a.confidence != null ? num(a.confidence, 2) : "—"}</span>,
+                          ])}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  {llm.length > 0 && (
+                    <div className="rounded-md border border-line">
+                      <Table
+                        head={["Model", "Outcome", "Tokens in/out", "Latency", "Cost"]}
+                        align={["l", "l", "r", "r", "r"]}
+                        rows={llm.map((call) => [
+                          <span key="m" className="font-mono text-xs">{call.provider}:{call.model}</span>,
+                          call.outcome,
+                          <span key="t">{`${num(call.tokens_in, 0)} / ${num(call.tokens_out, 0)}`}</span>,
+                          <span key="l">{`${num(call.latency_ms, 0)} ms`}</span>,
+                          <Money key="c" value={call.cost_inr} />,
+                        ])}
+                      />
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
-            {llm.length > 0 && (
-              <div className="mt-3 rounded-md border border-line">
-                <Table
-                  head={["Model", "Outcome", "Tokens in/out", "Latency", "Cost"]}
-                  align={["l", "l", "r", "r", "r"]}
-                  rows={llm.map((call) => [
-                    <span key="m" className="font-mono text-xs">{call.provider}:{call.model}</span>,
-                    call.outcome,
-                    <span key="t">{`${num(call.tokens_in, 0)} / ${num(call.tokens_out, 0)}`}</span>,
-                    <span key="l">{`${num(call.latency_ms, 0)} ms`}</span>,
-                    <Money key="c" value={call.cost_inr} />,
-                  ])}
-                />
-              </div>
+              </Collapsible>
             )}
           </div>
         );
@@ -355,26 +462,33 @@ function Counterfactual({ events }: { events: LineageEvent[] }) {
   const alpha = ofType(events, "ShadowAlphaSettled").map(data<AlphaData>);
   if (!opened.length) return <span className="text-fg-2">No counterfactual (only BUY signals with an ATR get one).</span>;
   return (
-    <div className="rounded-md border border-line bg-bg-1">
-      <Table
-        minWidth={880}
-        head={["Signal", "Entry", "Exit", "Exit reason", "Net P&L", "Net return", "Alpha vs NIFTY"]}
-        align={["l", "r", "r", "l", "r", "r", "r"]}
-        rows={opened.map((o) => {
-          const c = closed.find((x) => x.signal_id === o.signal_id);
-          const a = alpha.find((x) => x.signal_id === o.signal_id);
-          return [
-            <span key="s" className="font-mono text-xs">{o.strategy}{o.is_shadow_strategy ? " (shadow)" : ""}</span>,
-            <Price key="e" value={o.entry_price} />,
-            <Price key="x" value={c?.exit_price} />,
-            c ? <Badge key="r">{c.exit_reason ?? "—"}</Badge> : <span key="r" className="text-fg-2">open</span>,
-            <Money key="n" value={c?.net_pnl} pnl />,
-            <Pct key="p" value={c?.net_return_pct} pnl />,
-            <Pct key="a" value={a?.alpha_pct} pnl />,
-          ];
-        })}
-      />
-    </div>
+    <Collapsible
+      title="Shadow ledger detail"
+      summary="Advanced: a what-if record of the same signal traded on its own rules - it never touches a real book"
+      badge={<Badge size="sm" tone="neutral">technical</Badge>}
+      bodyClassName="p-3"
+    >
+      <div className="rounded-md border border-line bg-bg-1">
+        <Table
+          minWidth={880}
+          head={["Signal", "Entry", "Exit", "Exit reason", "Net P&L", "Net return", "Alpha vs NIFTY"]}
+          align={["l", "r", "r", "l", "r", "r", "r"]}
+          rows={opened.map((o) => {
+            const c = closed.find((x) => x.signal_id === o.signal_id);
+            const a = alpha.find((x) => x.signal_id === o.signal_id);
+            return [
+              <span key="s" className="font-mono text-xs">{o.strategy}{o.is_shadow_strategy ? " (shadow)" : ""}</span>,
+              <Price key="e" value={o.entry_price} />,
+              <Price key="x" value={c?.exit_price} />,
+              c ? <Badge key="r">{c.exit_reason ?? "—"}</Badge> : <span key="r" className="text-fg-2">open</span>,
+              <Money key="n" value={c?.net_pnl} pnl />,
+              <Pct key="p" value={c?.net_return_pct} pnl />,
+              <Pct key="a" value={a?.alpha_pct} pnl />,
+            ];
+          })}
+        />
+      </div>
+    </Collapsible>
   );
 }
 
@@ -471,13 +585,13 @@ export default function DecisionInspector() {
   const symbol = main ? symbolOf(main.instrument_key) : "—";
 
   const steps: Step[] = [
-    { id: "market", title: "Market context", meta: main && <TimeIST value={main.generated_at} label />, children: <MarketContext signal={main} risk={firstRisk} regime={regime} executions={executions} highlight={evidence} /> },
-    { id: "signal", title: `Signal${signals.length > 1 ? "s" : ""}`, children: <Signals signals={signals} dispositions={ofType(events, "SignalDisposition")} /> },
-    { id: "advisors", title: "Advisors (per book)", tone: ofType(events, "AdvisorVerdict").some((e) => data<VerdictData>(e).verdict === "VETO") ? "warn" : "neutral", children: <Advisors events={events} onEvidence={setEvidence} /> },
-    { id: "risk", title: "Risk decision (per book)", tone: ofType(events, "RiskDecision").some((e) => data<RiskData>(e).outcome !== "APPROVED") ? "warn" : "neutral", children: <RiskDecisions events={events} /> },
-    { id: "orders", title: "Orders and fills", children: <Orders executions={executions} fills={fills} /> },
-    { id: "exits", title: "Position and exit", children: <Exits events={events} /> },
-    { id: "counterfactual", title: "Counterfactual (shadow ledger)", children: <Counterfactual events={events} /> },
+    { id: "market", anchor: "step-market", title: "Market context", lead: "What the market looked like when this decision was made - all prices are recorded facts, not estimates.", meta: main && <TimeIST value={main.generated_at} label />, children: <MarketContext signal={main} risk={firstRisk} regime={regime} executions={executions} highlight={evidence} /> },
+    { id: "signal", anchor: "step-signal", title: `Signal${signals.length > 1 ? "s" : ""}`, lead: "What the strategy saw and why it fired. A signal is a proposal - it only becomes an order if the AI review (where configured) and the risk checks let it through.", children: <Signals signals={signals} dispositions={ofType(events, "SignalDisposition")} /> },
+    { id: "advisors", anchor: "step-advisors", title: "Advisors (per book)", lead: "Which AI reviewer looked at this trade, per book. A reviewer can only veto - it never changes price, size, stop or target, and 'no opinion' (abstain) is not an approval.", tone: ofType(events, "AdvisorVerdict").some((e) => data<VerdictData>(e).verdict === "VETO") ? "warn" : "neutral", children: <Advisors events={events} onEvidence={setEvidence} /> },
+    { id: "risk", anchor: "step-risk", title: "Risk decision (per book)", lead: "The rule-based safety checks every order must pass - hard limits on size, exposure, cash, data freshness and kill switches. A rejection here is not an AI decision.", tone: ofType(events, "RiskDecision").some((e) => data<RiskData>(e).outcome !== "APPROVED") ? "warn" : "neutral", children: <RiskDecisions events={events} /> },
+    { id: "orders", anchor: "step-orders", title: "Orders and fills", lead: "What actually went to the (simulated) broker and came back. Decision and arrival prices are plans; only the Fill column is an execution.", children: <Orders executions={executions} fills={fills} /> },
+    { id: "exits", anchor: "step-exits", title: "Position and exit", lead: "How the position closed - stop, target, time exit or an operator action - and what it made or lost after charges.", children: <Exits events={events} /> },
+    { id: "counterfactual", anchor: "step-counterfactual", title: "Counterfactual (shadow ledger)", lead: "Advanced, recorded-only: a what-if copy of the signal traded on its own rules. It never touches a real book.", children: <Counterfactual events={events} /> },
   ];
 
   return (
@@ -489,6 +603,7 @@ export default function DecisionInspector() {
         id={id}
         exits={exit_decision_ids}
       />
+      <WhatHappened lineage={lineage.data} />
       <Panel title="Lineage" description="Every recorded event behind this decision, in the order it happened" bodyClassName="p-4">
         <Timeline steps={steps} />
       </Panel>
