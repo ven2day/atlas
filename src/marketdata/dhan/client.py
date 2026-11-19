@@ -19,9 +19,12 @@ redacted and carries no credential.
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
+import random
+import threading
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -36,13 +39,32 @@ from src.marketdata.dhan.errors import (
     DhanRateLimitError,
 )
 from src.marketdata.dhan.instruments import EXCHANGE_SEGMENT, INSTRUMENT_TYPE
+from src.marketdata.dhan.pacer import SqlitePacer
 from src.ops.logging_config import redact
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.dhan.co/v2"
 
-# dhanhq.co/docs/v2: per-second limits, Data APIs 5 and Quote APIs 1.
+# dhanhq.co/docs/v2: per-second limits, Data APIs 5 and Quote APIs 1. The limits are per
+# *account*, so every client instance in this process paces on one shared limiter per endpoint
+# class (and, when configured, a cross-process SqlitePacer), and the effective rate stays below
+# the documented cap by a safety margin: bursts measured at exactly the cap still drew 429s.
 DATA_REQUESTS_PER_SECOND = 5.0
 QUOTE_REQUESTS_PER_SECOND = 1.0
+SAFETY_MARGIN = 0.8
+EFFECTIVE_DATA_PER_SECOND = DATA_REQUESTS_PER_SECOND * SAFETY_MARGIN  # 4/s
+EFFECTIVE_QUOTE_PER_SECOND = QUOTE_REQUESTS_PER_SECOND * SAFETY_MARGIN  # 0.8/s
+_PACER_INTERVAL_S = {
+    "data": 1.0 / EFFECTIVE_DATA_PER_SECOND,
+    "quote": 1.0 / EFFECTIVE_QUOTE_PER_SECOND,
+}
+# Bounded local queue: past this many waiters a caller sheds load with a rate-limit error
+# instead of silently stacking requests that will all arrive late (and probably 429).
+MAX_LOCAL_WAITERS = 64
+# Bounded 429 retry: Retry-After when Dhan sends it, else exponential backoff with jitter.
+RATE_LIMIT_RETRIES = 3
+RETRY_AFTER_CAP_S = 30.0
 QUOTE_BATCH_LIMIT = 1000
 INTRADAY_INTERVALS = (1, 5, 15, 25, 60)
 INTRADAY_MAX_WINDOW = timedelta(days=90)
@@ -52,20 +74,68 @@ INTRADAY_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
 class _Limiter:
-    """A minimum-interval gate: enough for the documented per-second caps, without a queue."""
+    """A minimum-interval gate with a bounded waiting queue."""
 
-    def __init__(self, per_second: float) -> None:
+    def __init__(self, per_second: float, *, max_waiters: int = MAX_LOCAL_WAITERS) -> None:
         self._interval = 1.0 / per_second
         self._last = 0.0
-        self._lock = asyncio.Lock()
+        self._max_waiters = max_waiters
+        self._waiters = 0
+        self._lock: asyncio.Lock | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def _get_lock(self) -> asyncio.Lock:
+        # Limiters are shared per process and may outlive one event loop (tests, restarts):
+        # bind the lock to the running loop and rebuild it when the loop changes.
+        loop = asyncio.get_running_loop()
+        if self._lock is None or self._loop is not loop:
+            self._lock = asyncio.Lock()
+            self._loop = loop
+        return self._lock
 
     async def wait(self) -> None:
-        async with self._lock:
-            now = time.monotonic()
-            due = self._last + self._interval
-            if due > now:
-                await asyncio.sleep(due - now)
-            self._last = time.monotonic()
+        if self._waiters >= self._max_waiters:
+            raise DhanRateLimitError(
+                f"local dhan request queue is full ({self._waiters} waiters); shedding this "
+                "request rather than queueing it behind a saturated account budget"
+            )
+        self._waiters += 1
+        try:
+            async with self._get_lock():
+                now = time.monotonic()
+                due = self._last + self._interval
+                if due > now:
+                    await asyncio.sleep(due - now)
+                self._last = time.monotonic()
+        finally:
+            self._waiters -= 1
+
+
+_SHARED_LIMITERS: dict[tuple[str, str], _Limiter] = {}
+_REGISTRY_LOCK = threading.Lock()
+
+
+def shared_limiter(base_url: str, kind: str, per_second: float) -> _Limiter:
+    """The one limiter for ``(base_url, kind)`` in this process: every DhanClient shares it, so
+    two clients (engine + research, quotes + history) can never jointly exceed the pace."""
+    with _REGISTRY_LOCK:
+        limiter = _SHARED_LIMITERS.get((base_url, kind))
+        if limiter is None:
+            limiter = _Limiter(per_second)
+            _SHARED_LIMITERS[(base_url, kind)] = limiter
+        return limiter
+
+
+def _retry_delay(response: httpx2.Response, attempt: int) -> float:
+    """``Retry-After`` when Dhan sends it (capped), else exponential backoff with jitter."""
+    raw = response.headers.get("retry-after")
+    if raw:
+        try:
+            return min(max(float(raw), 0.0), RETRY_AFTER_CAP_S)
+        except ValueError:
+            pass  # an HTTP-date or garbage: fall back to our own schedule
+    jitter: float = random.uniform(0.0, 0.25)
+    return min(8.0, 0.5 * float(2**attempt)) + jitter
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,13 +252,21 @@ class DhanClient:
         base_url: str = BASE_URL,
         client: httpx2.AsyncClient | None = None,
         timeout_s: float = 20.0,
+        pacer: SqlitePacer | None = None,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        rate_limit_retries: int = RATE_LIMIT_RETRIES,
     ) -> None:
         self._auth = auth
         self._base = base_url.rstrip("/")
         self._client = client if client is not None else httpx2.AsyncClient(timeout=timeout_s)
         self._owns_client = client is None
-        self._data = _Limiter(DATA_REQUESTS_PER_SECOND)
-        self._quotes = _Limiter(QUOTE_REQUESTS_PER_SECOND)
+        # Shared per (base_url, kind) across every client in this process: the documented caps
+        # are per account, not per instance.
+        self._data = shared_limiter(self._base, "data", EFFECTIVE_DATA_PER_SECOND)
+        self._quotes = shared_limiter(self._base, "quote", EFFECTIVE_QUOTE_PER_SECOND)
+        self._pacer = pacer  # cross-process pacing, when the caller configured it
+        self._sleep = sleep
+        self._rate_limit_retries = rate_limit_retries
 
     async def aclose(self) -> None:
         if self._owns_client:
@@ -196,52 +274,70 @@ class DhanClient:
 
     # -- transport ---------------------------------------------------------------------------
 
-    async def _call(self, path: str, *, limiter: _Limiter, body: dict[str, Any] | None) -> Any:
-        await limiter.wait()
-        token = await self._auth.token()
-        headers = {
-            "access-token": token,
-            "client-id": self._auth.client_id,
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        }
-        try:
-            response = await self._client.request(
-                "POST" if body is not None else "GET",
-                f"{self._base}{path}",
-                headers=headers,
-                json=body,
-            )
-        except httpx2.HTTPError as exc:
-            raise DhanError(f"dhan {path}: network failure ({type(exc).__name__})") from exc
-        if response.status_code in (401, 403):
-            self._auth.invalidate()
-            raise DhanAuthError(
-                f"dhan {path}: the access token was rejected (HTTP {response.status_code}); "
-                "regenerate it, or check DHAN_ACCESS_TOKEN / DHAN_PIN / DHAN_TOTP_SECRET",
-                status=response.status_code,
-            )
-        if response.status_code == 429:
-            raise DhanRateLimitError(
-                f"dhan {path}: rate limited (HTTP 429); the documented caps are 5 data and "
-                "1 quote request per second",
-                status=429,
-            )
-        if response.status_code >= 400:
-            raise DhanError(
-                f"dhan {path}: HTTP {response.status_code}: {redact(response.text[:300])}",
-                status=response.status_code,
-            )
-        try:
-            return response.json()
-        except ValueError as exc:
-            raise DhanMalformedResponseError(f"dhan {path}: response is not JSON") from exc
+    async def _call(
+        self, path: str, *, limiter: _Limiter, kind: str, body: dict[str, Any] | None
+    ) -> Any:
+        """One rate-limited request. HTTP 429 is retried within a bound (honouring
+        ``Retry-After``); auth failures, 4xx and malformed bodies are never retried."""
+        attempt = 0
+        while True:
+            await limiter.wait()
+            if self._pacer is not None:
+                await self._pacer.wait(kind, _PACER_INTERVAL_S[kind])
+            token = await self._auth.token()
+            headers = {
+                "access-token": token,
+                "client-id": self._auth.client_id,
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            }
+            try:
+                response = await self._client.request(
+                    "POST" if body is not None else "GET",
+                    f"{self._base}{path}",
+                    headers=headers,
+                    json=body,
+                )
+            except httpx2.HTTPError as exc:
+                raise DhanError(f"dhan {path}: network failure ({type(exc).__name__})") from exc
+            if response.status_code == 429 and attempt < self._rate_limit_retries:
+                delay = _retry_delay(response, attempt)
+                attempt += 1
+                logger.warning(
+                    "dhan %s: HTTP 429, retry %d/%d in %.2fs",
+                    path, attempt, self._rate_limit_retries, delay,
+                )  # fmt: skip
+                await self._sleep(delay)
+                continue
+            if response.status_code in (401, 403):
+                self._auth.invalidate()
+                raise DhanAuthError(
+                    f"dhan {path}: the access token was rejected (HTTP {response.status_code}); "
+                    "regenerate it, or check DHAN_ACCESS_TOKEN / DHAN_PIN / DHAN_TOTP_SECRET",
+                    status=response.status_code,
+                )
+            if response.status_code == 429:
+                raise DhanRateLimitError(
+                    f"dhan {path}: rate limited (HTTP 429) after {attempt} bounded "
+                    f"{'retries' if attempt else 'retry attempts'}; the documented caps are "
+                    "5 data and 1 quote request per second, shared per account",
+                    status=429,
+                )
+            if response.status_code >= 400:
+                raise DhanError(
+                    f"dhan {path}: HTTP {response.status_code}: {redact(response.text[:300])}",
+                    status=response.status_code,
+                )
+            try:
+                return response.json()
+            except ValueError as exc:
+                raise DhanMalformedResponseError(f"dhan {path}: response is not JSON") from exc
 
     # -- endpoints ---------------------------------------------------------------------------
 
     async def profile(self) -> DataPlan:
         """``GET /profile``: the Data API subscription state (``dataPlan`` / ``dataValidity``)."""
-        body = await self._call("/profile", limiter=self._data, body=None)
+        body = await self._call("/profile", limiter=self._data, kind="data", body=None)
         if not isinstance(body, dict):
             raise DhanMalformedResponseError("profile response is not a JSON object")
         data = body.get("data") if isinstance(body.get("data"), dict) else body
@@ -265,6 +361,7 @@ class DhanClient:
                 body = await self._call(
                     "/marketfeed/quote",
                     limiter=self._quotes,
+                    kind="quote",
                     body={segment: [int(i) for i in chunk]},
                 )
                 out |= parse_quotes(body, segment)
@@ -285,6 +382,7 @@ class DhanClient:
         body = await self._call(
             "/charts/historical",
             limiter=self._data,
+            kind="data",
             body={
                 "securityId": str(security_id),
                 "exchangeSegment": segment,
@@ -320,6 +418,7 @@ class DhanClient:
             body = await self._call(
                 "/charts/intraday",
                 limiter=self._data,
+                kind="data",
                 body={
                     "securityId": str(security_id),
                     "exchangeSegment": segment,

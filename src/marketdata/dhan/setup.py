@@ -18,14 +18,29 @@ from src.domain.sink import EventSink
 from src.marketdata.dhan.auth import TOKEN_FILE_NAME, DhanAuth
 from src.marketdata.dhan.client import DhanClient
 from src.marketdata.dhan.errors import DhanError
+from src.marketdata.dhan.history_cache import DailyCandleCache
 from src.marketdata.dhan.instruments import DhanMapping, parse_security_ids
+from src.marketdata.dhan.pacer import SqlitePacer
 
 PROVIDER = "dhan"
+# Dhan's per-second caps are per account, and more than one process may share the account (the
+# live engine and a research run): both pacing and the daily-candle cache live under the state
+# directory so every process on this machine cooperates through them.
+PACER_FILE = "dhan_pacer.sqlite3"
+HISTORY_CACHE_FILE = "dhan_history_cache.sqlite3"
 
 
 def security_overrides(settings: Settings) -> dict[str, DhanMapping]:
     """``DHAN_SECURITY_IDS`` as parsed mappings (empty when unset)."""
     return parse_security_ids(settings.dhan_security_ids)
+
+
+def build_pacer(settings: Settings) -> SqlitePacer:
+    return SqlitePacer(settings.state_dir / PACER_FILE)
+
+
+def build_history_cache(settings: Settings) -> DailyCandleCache:
+    return DailyCandleCache(settings.state_dir / HISTORY_CACHE_FILE)
 
 
 def token_file_for(settings: Settings) -> Path:
@@ -67,7 +82,11 @@ def build_auth(settings: Settings) -> DhanAuth:
 
 
 def build_client(settings: Settings, auth: DhanAuth | None = None) -> DhanClient:
-    return DhanClient(auth=auth or build_auth(settings), base_url=settings.dhan_base_url)
+    return DhanClient(
+        auth=auth or build_auth(settings),
+        base_url=settings.dhan_base_url,
+        pacer=build_pacer(settings),  # the account's budget is shared across processes
+    )
 
 
 async def check_data_plan(client: DhanClient, *, sink: EventSink | None = None) -> None:

@@ -518,17 +518,23 @@ def coverage_summary(store: ResearchStore, *, limit: int = 200) -> dict[str, Any
     by_source: Counter[str] = Counter()
     by_symbol: Counter[str] = Counter()
     by_type: Counter[str] = Counter()
+    by_capture: Counter[str] = Counter()
     newest: dict[str, str] = {}
     oldest: dict[str, str] = {}
+    last_received: dict[str, str] = {}
     for row in records:
         source = str(row.get("source") or "")
         by_source[source] += 1
         by_symbol[str(row.get("symbol") or "")] += 1
         by_type[str(row.get("event_type") or "unclassified")] += 1
+        by_capture[str(row.get("capture_kind") or "unknown")] += 1
         published = str(row.get("published_at_utc") or "")
         if published:
             newest[source] = max(newest.get(source, ""), published)
             oldest[source] = min(oldest.get(source, published), published)
+        received = str(row.get("received_at_utc") or "")
+        if received:
+            last_received[source] = max(last_received.get(source, ""), received)
     imports = store.imports(limit=limit)
     incomplete = [
         {
@@ -541,19 +547,38 @@ def coverage_summary(store: ResearchStore, *, limit: int = 200) -> dict[str, Any
         for i in imports
         if str(i.get("status")) != "completed"
     ]
+    gaps = [
+        {
+            "source": g.get("source"),
+            "gap_from": g.get("gap_from"),
+            "gap_to": g.get("gap_to"),
+            "reason": g.get("reason"),
+        }
+        for g in store.coverage_gaps()
+    ]
     return {
         "records": len(records),
         "by_source": dict(by_source),
         "by_symbol": dict(sorted(by_symbol.items())),
         "by_event_type": dict(sorted(by_type.items())),
+        "by_capture_kind": dict(sorted(by_capture.items())),
         "oldest_published": oldest,
         "newest_published": newest,
+        "last_received": last_received,
         "imports": len(imports),
+        "duplicates": sum(int(i.get("duplicates") or 0) for i in imports),
         "incomplete_imports": incomplete,
+        "coverage_gaps": gaps,
         "warning": (
             "windows marked failed or incomplete are UNKNOWN, not empty: a missing response was "
             "never converted into 'there were no events'"
             if incomplete
+            else ""
+        ),
+        "rss_note": (
+            "the NSE RSS feed is a rolling window (~165 newest items): the nse_rss archive grows "
+            "prospectively from the first collection and is not a complete historical record"
+            if by_source.get("nse_rss")
             else ""
         ),
     }

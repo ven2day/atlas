@@ -6,6 +6,9 @@ Subcommands:
     import      Import historical corporate announcements from a local file or a configured,
                 authorized HTTP archive. Resumable, rate-limited, deduplicated, and it never
                 turns a failed window into "there were no events".
+    sync-rss    Sync the announcements the live NSE RSS collector stored in the event store into
+                the research archive, with their real receipt times and coverage gaps. Repeatable
+                and idempotent; the archive grows prospectively from the first collection.
     coverage    Show what has been imported, by source, symbol and event type, and which windows
                 are still unknown.
     outcomes    Classify imported records with the versioned rule table, fetch price history with
@@ -20,6 +23,7 @@ nothing here touches the live trading path.
 
     uv run python scripts/research_history.py import --file var/research/events.json \\
         --from 2024-01-01 --to 2024-12-31 --symbol INFY --symbol TCS
+    uv run python scripts/research_history.py sync-rss
     uv run python scripts/research_history.py coverage
     uv run python scripts/research_history.py outcomes --mode reconstructed
     uv run python scripts/research_history.py walkforward --run-id demo-1 --mode reconstructed
@@ -29,7 +33,9 @@ The repository ships **no** authorized historical NSE announcement endpoint. NSE
 date-range API for corporate announcements; ``nsearchives.nseindia.com`` serves individual
 documents only, and the filings page is driven by undocumented internal endpoints that OD-10
 forbids scraping. So ``--source local_file`` (an export you are licensed to hold) is the supported
-path, and ``--source http`` requires you to supply your own authorized ``--url``.
+backfill path, ``--source http`` requires you to supply your own authorized ``--url``, and
+``sync-rss`` grows the archive prospectively from what the live collector observed (the RSS feed
+is a rolling window, never a historical source).
 """
 
 import argparse
@@ -47,6 +53,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 from src.config import get_settings
 from src.config.settings import Settings
 from src.domain.calendar import get_calendar
+from src.domain.events import AnnouncementCoverageGap, AnnouncementReceived
 from src.domain.types import Instrument
 from src.engine.market import INDEX_KEY, INDEX_TICKER, build_history_source
 from src.marketdata.history import DailySeries
@@ -76,8 +83,10 @@ from src.research.outcomes import (
     summarize_outcomes,
 )
 from src.research.provenance import EvaluationMode
+from src.research.rss_sync import EventStoreRssSource, actual_mode_records, gaps_from_events
 from src.research.store import ResearchStore
 from src.research.walkforward import WalkForwardConfig
+from src.store.event_store import EventStore
 from src.utils.market_time import now_ist
 
 
@@ -111,6 +120,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     cov = sub.add_parser("coverage", help="show imported coverage and unknown windows")
     cov.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+
+    syn = sub.add_parser(
+        "sync-rss",
+        help="sync the live RSS announcement collection (event store) into the research archive",
+    )
+    syn.add_argument("--from", dest="range_from", type=_date, default=None,
+                     help="default: the earliest stored announcement")  # fmt: skip
+    syn.add_argument("--to", dest="range_to", type=_date, default=None, help="default: today")
+    syn.add_argument("--symbol", action="append", default=[], help="repeatable; default all")
+    syn.add_argument("--dry-run", action="store_true", help="read the event store, write nothing")
 
     out = sub.add_parser("outcomes", help="classify, price and compute event outcomes")
     out.add_argument("--mode", choices=[m.value for m in EvaluationMode], default="reconstructed")
@@ -232,6 +251,18 @@ async def _fetch_prices(
         notes.append(f"{key}: no daily history ({reason})")
     for key, last in sorted(result.lagging.items()):
         notes.append(f"{key}: history ends {last.isoformat()}")
+    if result.cached:
+        notes.append(
+            f"{len(result.cached)} instrument(s) reused cached daily candles "
+            f"(oldest fetched {min(result.cached.values())})"
+        )
+    unadjusted = {k: v for k, v in result.adjustments.items() if v.startswith("unavailable")}
+    if unadjusted:
+        sample = sorted(unadjusted)[0]
+        notes.append(
+            f"{len(unadjusted)} instrument(s) have no corporate-action adjustment ({sample}: "
+            f"{unadjusted[sample]}); their indicators run on raw closes"
+        )
     if not targets:
         notes.append("no instruments to price: no requested symbol has an instrument mapping")
     return dict(result.series), result.series.get(INDEX_KEY), notes
@@ -285,17 +316,75 @@ def _cmd_coverage(args: argparse.Namespace, store: ResearchStore) -> int:
     print(f"imported records: {summary['records']}   import runs: {summary['imports']}")
     print(f"by source     : {summary['by_source']}")
     print(f"by event type : {summary['by_event_type']}")
+    print(f"by capture    : {summary['by_capture_kind']}")
     print(f"published from: {summary['oldest_published']}")
     print(f"published to  : {summary['newest_published']}")
+    print(f"last received : {summary['last_received']}")
+    print(f"duplicates skipped across imports: {summary['duplicates']}")
     symbols = summary["by_symbol"]
     print(f"symbols ({len(symbols)}):")
     for symbol, count in sorted(symbols.items()):
         print(f"  {symbol:<14} {count}")
+    if summary["coverage_gaps"]:
+        print("\ncollector coverage gaps (UNKNOWN windows, never 'no events'):")
+        for gap in summary["coverage_gaps"]:
+            print(f"  {gap['source']} {gap['gap_from']} -> {gap['gap_to']} ({gap['reason']})")
     if summary["incomplete_imports"]:
         print("\nincomplete imports (these windows are UNKNOWN, not empty):")
         for item in summary["incomplete_imports"]:
             print(f"  {item['import_id']} {item['source']} {item['status']} {item['range']}")
+    if summary["rss_note"]:
+        print(f"\nnote: {summary['rss_note']}")
     return ExitCode.OK
+
+
+async def _cmd_sync_rss(args: argparse.Namespace, store: ResearchStore) -> int:
+    """Make the live RSS collection available to research, repeatably and without backdating."""
+    settings = get_settings()
+    with EventStore(settings.db_path) as event_store:
+        events = event_store.read(types=["AnnouncementReceived", "AnnouncementCoverageGap"])
+    announcements = [
+        (e.payload, e.seq) for e in events if isinstance(e.payload, AnnouncementReceived)
+    ]
+    gaps = [e.payload for e in events if isinstance(e.payload, AnnouncementCoverageGap)]
+    if not announcements:
+        print(
+            "no stored RSS announcements: run a session with ANNOUNCEMENTS_ENABLED=true first "
+            "(the collector polls NSE's official RSS feed during the session and pre-open)"
+        )
+        return ExitCode.OK
+    range_from = args.range_from or min(a.published_at.date() for a, _ in announcements)
+    range_to = args.range_to or now_ist().date()
+    source = EventStoreRssSource(announcements)
+    if args.dry_run:
+        page = await source.fetch(
+            range_from=range_from, range_to=range_to, symbols=args.symbol,
+            cursor=None, limit=100000,
+        )  # fmt: skip
+        print(f"[dry-run] the event store would sync {len(page.records)} record(s) "
+              f"({range_from}..{range_to}) and {len(gaps)} coverage gap(s)")  # fmt: skip
+        return ExitCode.OK
+    report = await historical.import_history(
+        store, source, range_from=range_from, range_to=range_to, symbols=args.symbol
+    )
+    synced_gaps = store.save_coverage_gaps([g.as_row() for g in gaps_from_events(gaps)])
+    print(f"sync-rss {report.import_id} -> {report.status}")
+    print(f"  fetched={report.fetched} inserted={report.inserted} "
+          f"duplicates={report.duplicates} rejected={report.rejected}")  # fmt: skip
+    print(f"  coverage gaps synced: {synced_gaps} statement(s), {len(gaps)} known gap(s)")
+    summary = historical.coverage_summary(store)
+    print("\nnse_rss archive (prospective collection, not a historical backfill):")
+    print(f"  published from : {summary['oldest_published'].get('nse_rss', '-')}")
+    print(f"  published to   : {summary['newest_published'].get('nse_rss', '-')}")
+    print(f"  last received  : {summary['last_received'].get('nse_rss', '-')}")
+    print(f"  records        : {summary['by_source'].get('nse_rss', 0)}")
+    print(f"  capture kinds  : {summary['by_capture_kind']}")
+    if summary["coverage_gaps"]:
+        print(f"  unknown windows: {len(summary['coverage_gaps'])} coverage gap(s) - treat as "
+              "missing data, not as quiet periods")  # fmt: skip
+    for note in report.notes:
+        print(f"  ! {note}")
+    return ExitCode.OK if report.status == "completed" else ExitCode.CRASH
 
 
 async def _cmd_outcomes(args: argparse.Namespace, store: ResearchStore) -> int:
@@ -311,6 +400,16 @@ async def _cmd_outcomes(args: argparse.Namespace, store: ResearchStore) -> int:
     if not records:
         print("no imported records match; run `research_history.py import` first")
         return ExitCode.OK
+    if mode is EvaluationMode.ACTUAL:
+        eligible, excluded = actual_mode_records(records)
+        records = [dict(row) for row in eligible]
+        if excluded:
+            print(f"ACTUAL mode: excluded {excluded} record(s) without a genuine recorded "
+                  "receipt; backfilled imports stay in RECONSTRUCTED mode")  # fmt: skip
+        if not records:
+            print("no forward-captured records to evaluate: run a live session and `sync-rss` "
+                  "first (ACTUAL mode reads only real recorded receipts)")  # fmt: skip
+            return ExitCode.OK
 
     classifications = store.latest_classifications()
     new_rows = historical.classify_records(records, classified_at=now, existing=classifications)
@@ -575,6 +674,8 @@ def _cmd_report(args: argparse.Namespace, store: ResearchStore) -> int:
 async def _amain(args: argparse.Namespace, store: ResearchStore) -> int:
     if args.command == "import":
         return await _cmd_import(args, store)
+    if args.command == "sync-rss":
+        return await _cmd_sync_rss(args, store)
     if args.command == "outcomes":
         return await _cmd_outcomes(args, store)
     if args.command == "walkforward":

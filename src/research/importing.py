@@ -90,7 +90,14 @@ class SourceNotConfiguredError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class SourceRecord:
-    """One announcement as the source gave it, plus the identity we will deduplicate on."""
+    """One announcement as the source gave it, plus the identity we will deduplicate on.
+
+    ``received_at`` is the receipt time the *source itself recorded* (the live RSS collector's
+    own timestamp, synced from the event store). When it is None the store falls back to the
+    import time - which for a backfill is honestly "we do not know when this was first seen".
+    ``capture_kind`` is ``forward_captured`` only for records whose receipt time is a real
+    recorded observation; ACTUAL-mode evaluation reads nothing else.
+    """
 
     source: str
     symbol: str
@@ -99,6 +106,8 @@ class SourceRecord:
     source_id: str | None = None
     event_type: str | None = None
     document_url: str | None = None
+    received_at: datetime | None = None
+    capture_kind: str = "unknown"
 
     @property
     def record_id(self) -> str:

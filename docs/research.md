@@ -199,6 +199,7 @@ been knowable, and score the forecasters over history. It is driven by one CLI:
 
 ```bash
 uv run python scripts/research_history.py import     --file <export.json> --from 2026-06-01 --to 2026-09-30
+uv run python scripts/research_history.py sync-rss
 uv run python scripts/research_history.py coverage
 uv run python scripts/research_history.py outcomes   --mode reconstructed
 uv run python scripts/research_history.py walkforward --run-id my-run --mode reconstructed
@@ -209,6 +210,27 @@ Every stage supports `--dry-run`, and `import` supports `--symbol`, `--chunk-day
 `--min-interval` and `--max-retries`. A worked example dataset, clearly labelled synthetic, is at
 [`docs/examples/historical-events.example.json`](examples/historical-events.example.json). Run it
 with `ENVIRONMENT=dev` so it lands in `var/dev/` and never mixes with real research in `var/paper/`.
+
+### The RSS event archive (`sync-rss`)
+
+The live collector (`src/marketdata/announcements.py`) polls NSE's official announcements RSS
+feed and stores every matched announcement as an `AnnouncementReceived` event, with the
+exchange's `published_at` **and** its own real `received_at`, plus `AnnouncementCoverageGap`
+events for failed polls and windows the rolling feed overflowed. `sync-rss` makes that
+collection available to this research pipeline through the same importer, deduplicated on the
+collector's stable announcement id, so re-running is a no-op:
+
+- **Receipt times are never backdated.** `received_at_utc` stays the collector's observation;
+  `imported_at_utc` is the sync's wall clock. Records synced from the live collection are marked
+  `capture_kind='forward_captured'` — the only rows `outcomes --mode actual` will read. Backfills
+  (`local_file`, `http`) stay `unknown` and belong to RECONSTRUCTED mode.
+- **Corrections are preserved.** An edited feed item arrives under a new announcement id, so both
+  versions persist; content that changes under a stable id is appended to
+  `research_record_revisions` and never overwrites the first receipt.
+- **Gaps stay gaps.** Synced coverage gaps are reported by `coverage` as UNKNOWN windows — a
+  missed feed poll is never readable as "no events".
+- **The archive is prospective.** The feed holds only the newest ~165 items, so the archive grows
+  from the first collection onward and is not a historical backfill; `coverage` says so.
 
 ### Where historical announcements can come from
 
@@ -332,9 +354,12 @@ says so explicitly instead of implying it.
 
 Migration `0004_research_history.sql` adds seven tables — `research_source_records`,
 `research_imports`, `research_classifications`, `research_price_datasets`,
-`research_event_outcomes`, `research_walkforward`, `research_evaluations`. Like 0003 it is purely
-additive: no existing table or column changes, existing research publications and all trading data
-are preserved, and none of them are projections.
+`research_event_outcomes`, `research_walkforward`, `research_evaluations`. Migration
+`0005_rss_archive.sql` adds the RSS archive's provenance: `capture_kind` on
+`research_source_records` (default `'unknown'` for existing rows), plus
+`research_record_revisions` and `research_coverage_gaps`. Both are purely additive: no existing
+table or column changes, existing research publications and all trading data are preserved, and
+none of them are projections.
 
 ## Configuration
 

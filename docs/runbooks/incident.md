@@ -43,7 +43,7 @@ always reversible.
 | `SYS_RECON_DRIFT` alert | The position book disagrees with the broker's state. | A P0 for the paper broker: it should never drift. Entries stay blocked until the next reconcile agrees. |
 | An order stuck `UNKNOWN` | A submission whose outcome wasn't confirmed. | It's resolved by its tag (adopted) or rejected after two checks; entries in that symbol are blocked meanwhile (`SYS_UNKNOWN_ORDER`). |
 | Book C trades exactly like A | The veto role is off, down, out of budget or refusing (`AdvisorFallback`). | AI Desk: model health and spend; `uv run python scripts/llm_check.py`. See [providers](providers.md). |
-| Book B trades exactly like A | No decision model (`decision_models_unavailable` alert), or every answer unsure and no Jev key. | Check that the `decision-local` extra is installed and `DECISION_LAYA_ENABLED` is on. |
+| Book B trades exactly like A | No decision model (`decision_models_unavailable` alert — announcements still get rule-based types, but direction/materiality stay UNKNOWN), or every answer unsure and no Jev key. | Check that the `decision-local` extra is installed and `DECISION_LAYA_ENABLED` is on, or set `TYPESAFE_API_KEY`. |
 | A kill switch tripped | A limit was reached, or HALT, or an operator. | [Kill switches](kill-switch.md): find out why before resuming. |
 | Console shows the auth screen | The token belongs to one launch. | Use the URL printed by this launch. |
 

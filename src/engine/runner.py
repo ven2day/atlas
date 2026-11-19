@@ -341,16 +341,21 @@ class Engine:
         return {as_date(ts): float(c) for ts, c in zip(frame.index, frame["close"], strict=True)}
 
     def _compute_regime(self, day: object) -> Regime | None:
-        series = self.market.index_series()
+        series, cause = self.market.index_status()
         if series is None:
+            # Name the specific provider failure rather than hiding behind "no history": the
+            # index is routed Dhan-first with a Yahoo fallback, so reaching this means both
+            # were asked and neither answered.
             self.sink.emit(Alert(level="WARNING", key="regime_unavailable",
-                                 message="no NIFTY history: regime unknown today"),
+                                 message=f"no NIFTY history ({cause}): regime UNKNOWN today"),
                            source="engine")  # fmt: skip
             return None
         try:
             reading = compute_regime(series.adjusted(), self.config.regime)
         except ValueError as exc:
-            self.sink.emit(Alert(level="WARNING", key="regime_unavailable", message=str(exc)),
+            self.sink.emit(Alert(level="WARNING", key="regime_unavailable",
+                                 message=f"{exc} (last settled index bar {series.last_date}): "
+                                         "regime UNKNOWN today"),
                            source="engine")  # fmt: skip
             return None
         assert self.lifecycle.schedule is not None

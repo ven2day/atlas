@@ -334,11 +334,20 @@ quote; the watchlist's source badge reads `dhan`. If the account is not entitled
 loudly instead of falling back, and a dropped feed raises `FeedStale` rather than showing
 cached or synthetic prices as live.
 
-**Known limitation.** Dhan publishes no corporate actions, so in `dhan` mode daily history is
-unadjusted (adjustment factor 1.0) and indicators run on raw closes; the engine emits a
-`dhan_history_unadjusted` WARNING alert at startup saying exactly that. The NIFTY 50 index the
-regime reads comes from Dhan when `DHAN_SECURITY_IDS` maps `NIFTY50=IDX_I:<id>`, and from
-YFinance otherwise; every bar keeps the `source` that served it.
+**Corporate actions.** Dhan itself publishes none, so in `dhan` mode the daily history keeps
+Dhan's raw prices (quotes, fills and stops stay raw) and indicators use a dividend adjustment
+from a separately sourced Yahoo corporate-action table; the startup `dhan_history_unadjusted`
+WARNING explains this, and if the overlay is unavailable for a symbol a `history_unadjusted`
+warning names it and its indicators fall back to raw closes. Splits are recorded but not applied
+(the documented vendor convention is that daily history is already on the current share basis).
+Dhan's per-second caps are per *account*, so every client in a process shares one limiter (with a
+safety margin), processes on the machine share a SQLite pacer, HTTP 429s are retried within a
+bound honouring `Retry-After`, and settled daily candles are cached under the state directory
+(cache reuse is labelled with its fetch time). The NIFTY 50 index the regime reads comes from
+Dhan when `DHAN_SECURITY_IDS` maps `NIFTY50=IDX_I:<id>`, and from YFinance otherwise — with
+YFinance also kept as a fallback when Dhan is mapped but fails, so a rate limit alone cannot
+leave the regime unknown; if both providers fail, the `regime_unavailable` alert names both
+causes. Every bar keeps the `source` that served it.
 
 ## 🧰 Tech stack
 

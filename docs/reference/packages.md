@@ -282,6 +282,7 @@ Imports: `config`, `domain`, `ops`, `store`, `utils`.
 
 | Module | Purpose |
 | --- | --- |
+| `marketdata/adjustments.py` | Corporate actions as a separately sourced adjustment table (for providers that serve none). |
 | `marketdata/announcements.py` | Corporate-announcement ingestion (plan M7.6). |
 | `marketdata/bhavcopy.py` | NSE capital-market bhavcopies (UDiFF) as a point-in-time daily dataset (plan M11.3). |
 | `marketdata/composite.py` | Composing history sources: the primary serves the priced universe, a secondary serves the few keys the primary cannot (today: the NIFTY 50 index, which Dhan's cash-equity master has no row for and which the regime reads). |
@@ -289,8 +290,10 @@ Imports: `config`, `domain`, `ops`, `store`, `utils`.
 | `marketdata/dhan/client.py` | A thin, rate-limited DhanHQ v2 REST client for **market data only**. |
 | `marketdata/dhan/errors.py` | Error types for the Dhan data provider. Messages are safe to log and to show: they never carry a token, PIN, TOTP secret or client id, and any server body they quote is redacted. |
 | `marketdata/dhan/history.py` | Daily history from Dhan's ``POST /charts/historical``, shaped into the engine's ``HistorySource`` protocol. |
+| `marketdata/dhan/history_cache.py` | A durable cache for Dhan's daily historical candles. |
 | `marketdata/dhan/instruments.py` | Mapping RakshaQuant instruments onto Dhan's identifiers. |
 | `marketdata/dhan/oauth.py` | DhanHQ's OAuth consent flow (documented "Method 3"), for accounts that have an app key/secret. |
+| `marketdata/dhan/pacer.py` | A cross-process minimum-interval gate for Dhan's documented per-second API caps. |
 | `marketdata/dhan/quotes.py` | Live quotes from Dhan's batched quote API, shaped into the engine's ``QuoteSource`` protocol. |
 | `marketdata/dhan/setup.py` | Startup checks and construction helpers for ``MARKET_DATA_PROVIDER=dhan``. |
 | `marketdata/dhan/timestamps.py` | Turning Dhan's timestamps into honest IST instants. |
@@ -373,6 +376,7 @@ Imports: `brokers`, `config`, `domain`, `engine`, `features`, `marketdata`, `ref
 | `research/outcomes.py` | The price and outcome dataset: provenance first, numbers second. |
 | `research/pipeline.py` | One research run: from the event store to persisted, explainable candidate cards. |
 | `research/provenance.py` | Four timestamps, two evaluation modes, and versioned classifications. |
+| `research/rss_sync.py` | Sync the live NSE RSS announcement collection into the historical research archive. |
 | `research/snapshot.py` | The research run's published snapshot: one JSON file the console reads. |
 | `research/status.py` | Candidate status: WATCH, SETUP_FORMING, CONFIRMED, INVALIDATED, NO_TRADE. |
 | `research/store.py` | Durable state for the research layer, in the environment's own SQLite database. |

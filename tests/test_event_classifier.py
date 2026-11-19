@@ -16,6 +16,7 @@ from src.decision_models.tasks.announcements import (
     QUESTIONS,
     AnnouncementPipeline,
     EventClassifier,
+    RuleEventClassifier,
     announcement_state,
     extract_event_date,
     subject_type,
@@ -141,6 +142,36 @@ async def test_abstained_questions_stay_unknown():
     assert event.announcement_type is None and event.direction is None and event.materiality is None
     assert event.relevant is True  # unknown relevance stays visible to the gates
     assert event.extra["abstained"] == sorted(QUESTIONS) and event.model == "none"
+
+
+async def test_the_rule_fallback_classifies_only_what_the_rules_know():
+    """No model configured: the deterministic subject rules still run, and they never invent a
+    direction or a materiality - those stay UNKNOWN, and every event is labelled rule-derived."""
+    clock = ReplayClock(T0)
+    sink = RecordingSink(clock)
+    clf = RuleEventClassifier(sink=sink, clock=clock)
+
+    event = await clf.classify(announcement("Results for Q2", subject="Financial Result Updates"))
+    assert event.announcement_type is A.RESULTS
+    assert event.direction is None and event.materiality is None  # rules do not read the text
+    assert event.relevant is True  # results are always price-relevant
+    assert event.model == "subject_rules" and event.calibrated is False
+    assert event.extra["classifier"] == "rule_fallback"
+    assert event.extra["type_source"] == "exchange_subject"
+    assert event.extra["event_date"] == "2026-10-05"  # results: the publication date
+
+    meeting = await clf.classify(announcement(
+        "Board of Directors will meet on October 16, 2026 to consider the financial results",
+        subject="Board Meeting Intimation", aid="a2",
+    ))  # fmt: skip
+    assert meeting.announcement_type is A.RESULTS_DATE
+    assert meeting.extra["event_date"] == "2026-10-16" and meeting.direction is None
+
+    unknown = await clf.classify(announcement("Some update", subject="General Updates", aid="a3"))
+    assert unknown.announcement_type is None and unknown.model == "none"
+    assert unknown.relevant is True  # unclassifiable stays visible, never dropped
+    assert unknown.extra["type_source"] == "unclassified"
+    assert unknown.direction is None and unknown.materiality is None
 
 
 def test_acceptance_no_portfolio_data_can_reach_a_decision_model_state():

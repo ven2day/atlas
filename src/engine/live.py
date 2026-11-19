@@ -33,6 +33,7 @@ from src.decision_models.setup import build_cascade
 from src.decision_models.tasks.announcements import (
     AnnouncementPipeline,
     EventClassifier,
+    RuleEventClassifier,
     unclassified,
 )
 from src.domain.calendar import get_calendar
@@ -55,6 +56,7 @@ from src.evaluation.review import review_day
 from src.llm.registry import validate_roles
 from src.llm.router import LLMRouter, StoreResponseCache
 from src.llm.setup import build_router
+from src.marketdata.adjustments import YahooCorporateActions
 from src.marketdata.announcements import AnnouncementIngestor, watermark
 from src.marketdata.composite import CompositeHistorySource
 from src.marketdata.dhan import (
@@ -65,7 +67,7 @@ from src.marketdata.dhan import (
     validate_market_data_provider,
 )
 from src.marketdata.dhan.instruments import INDEX_SEGMENT, DhanMapping
-from src.marketdata.dhan.setup import security_overrides
+from src.marketdata.dhan.setup import build_history_cache, security_overrides
 from src.marketdata.history import YFinanceHistorySource
 from src.marketdata.replay import TapeHistorySource, TapeQuoteSource
 from src.marketdata.validation import QuoteValidator, band_lookup
@@ -159,15 +161,27 @@ async def run_paper(
                 validator=validator, market_open=calendar.is_market_open, overrides=overrides,
             )  # fmt: skip
             history = CompositeHistorySource(
-                primary=DhanHistorySource(client=client, tape=tape, overrides=overrides),
+                primary=DhanHistorySource(
+                    client=client, tape=tape, overrides=overrides,
+                    cache=build_history_cache(settings),  # settled candles: fetch once, reuse
+                    adjustments=YahooCorporateActions(),  # Dhan serves none; Yahoo's table does
+                ),  # fmt: skip
                 secondary=YFinanceHistorySource(tape=tape),  # the NIFTY index, for the regime
                 secondary_keys=set() if index_instrument else {INDEX_KEY},
                 extra_instruments=[index_instrument] if index_instrument else [],
+                # Even when DHAN_SECURITY_IDS routes the index to Dhan, Yahoo stays as its
+                # fallback: a Dhan rate limit must not leave the regime unknown.
+                secondary_fallback_keys={INDEX_KEY} if index_instrument else set(),
             )  # fmt: skip
             sink.emit(Alert(level="WARNING", key="dhan_history_unadjusted",
-                            message="MARKET_DATA_PROVIDER=dhan: Dhan publishes no corporate "
-                                    "actions, so its daily history is unadjusted and indicators "
-                                    "run on raw closes"), source="marketdata")  # fmt: skip
+                            message="MARKET_DATA_PROVIDER=dhan: Dhan itself publishes no "
+                                    "corporate actions. Daily history keeps Dhan's raw prices "
+                                    "(quotes, fills and stops stay raw); indicators use a "
+                                    "dividend adjustment from a separately sourced Yahoo "
+                                    "corporate-action table. When that overlay is unavailable "
+                                    "for a symbol, a 'history_unadjusted' warning names it and "
+                                    "its indicators fall back to raw closes."),
+                  source="marketdata")  # fmt: skip
         else:
             quotes = YFinanceQuoteSource(
                 list(priced.values()), clock=clock, sink=sink, tape=tape,
@@ -208,16 +222,24 @@ def _announcements(
     ingestor = AnnouncementIngestor(instruments=equities, clock=clock, sink=sink,
                                     url=settings.announcements_url, seen=seen,
                                     last_newest=newest)  # fmt: skip
-    if cascade is None:
-        logger.warning("no decision model (laya not installed, no TYPESAFE_API_KEY): "
-                       "announcements are stored but not classified")  # fmt: skip
-        sink.emit(Alert(level="WARNING", key="decision_models_unavailable",
-                        message="announcements stored, not classified"), source="engine")  # fmt: skip
-        return AnnouncementPipeline(ingestor=ingestor, classifier=None)
     classified = [r["event_id"] for r in store.query("SELECT event_id FROM typed_events")]
+    backlog = unclassified(stored, classified)
+    if cascade is None:
+        # One actionable startup warning (not a per-cycle repeat): the deterministic subject
+        # rules keep classifying, and the message says exactly what to configure for more.
+        logger.warning("no decision model (laya not installed, no TYPESAFE_API_KEY): "
+                       "announcements are classified by subject rules only")  # fmt: skip
+        sink.emit(Alert(level="WARNING", key="decision_models_unavailable",
+                        message="no decision model configured: announcements are classified by "
+                                "deterministic NSE subject rules only; direction and materiality "
+                                "stay UNKNOWN. Enable the local model (uv sync --extra "
+                                "decision-local, DECISION_LAYA_ENABLED=true) or set "
+                                "TYPESAFE_API_KEY for the remote model."), source="engine")  # fmt: skip
+        return AnnouncementPipeline(ingestor=ingestor,
+                                    classifier=RuleEventClassifier(sink=sink, clock=clock),
+                                    backlog=backlog)  # fmt: skip
     classifier = EventClassifier(cascade=cascade, sink=sink, clock=clock)
-    return AnnouncementPipeline(ingestor=ingestor, classifier=classifier,
-                                backlog=unclassified(stored, classified))  # fmt: skip
+    return AnnouncementPipeline(ingestor=ingestor, classifier=classifier, backlog=backlog)
 
 
 async def run_demo(
