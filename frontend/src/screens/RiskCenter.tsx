@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { get, post, type Schemas } from "../api/client";
 import { keys } from "../api/queries";
 import { cx } from "../lib/cx";
+import { REASON_CODES } from "../lib/explain";
 import { num } from "../lib/format";
 import { useUi } from "../lib/ui";
 import { Icon } from "../shell/icons";
@@ -116,8 +117,11 @@ function Histogram({ counts }: { counts: Record<string, number> }) {
   return (
     <ul className="flex flex-col gap-2.5 p-4 text-sm">
       {entries.map(([code, n]) => (
-        <li key={code} className="grid grid-cols-[minmax(120px,200px)_1fr_auto] items-center gap-3">
-          <span className="truncate font-mono text-xs text-fg-1" title={code}>{code}</span>
+        <li key={code} className="grid grid-cols-[minmax(160px,280px)_1fr_auto] items-center gap-3">
+          <span className="min-w-0" title={`${code}: ${REASON_CODES[code] ?? "no plain description recorded"}`}>
+            <span className="block truncate text-xs text-fg-0">{REASON_CODES[code] ?? code}</span>
+            <span className="block truncate font-mono text-2xs text-fg-2">{code}</span>
+          </span>
           <span className="h-2 overflow-hidden rounded-full bg-bg-3" aria-hidden="true">
             <span className="block h-full rounded-full bg-warn" style={{ width: `${(n / max) * 100}%` }} />
           </span>

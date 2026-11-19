@@ -7,6 +7,7 @@ import { useNavigate } from "react-router";
 
 import { get, type Schemas } from "../api/client";
 import { keys } from "../api/queries";
+import { DISPOSITIONS } from "../lib/explain";
 import { Icon } from "../shell/icons";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -27,7 +28,11 @@ export const DECISION_COLUMNS: Columns<Row> = [
   col.accessor("disposition", {
     header: "Outcome",
     size: 124,
-    cell: (c) => <Badge tone={c.getValue() === "submitted" ? "neutral" : undefined}>{DISPOSITION[c.getValue()] ?? c.getValue()}</Badge>,
+    cell: (c) => (
+      <Badge tone={c.getValue() === "submitted" ? "neutral" : undefined} title={DISPOSITIONS[c.getValue()]?.plain}>
+        {DISPOSITION[c.getValue()] ?? c.getValue()}
+      </Badge>
+    ),
   }),
   col.accessor("detail", { header: "Detail", size: 420, cell: (c) => <span className="text-fg-1">{c.getValue() || "—"}</span> }),
   col.accessor("decision_id", { header: "Decision", size: 132, cell: (c) => <DecisionLink id={c.getValue()} /> }),

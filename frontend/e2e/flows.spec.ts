@@ -62,3 +62,26 @@ test("the palette opens a decision by id", async ({ page }) => {
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(new RegExp(`/decisions/${id}$`));
 });
+
+test("the command center answers 'what is happening right now' and offers session control", async ({ page }) => {
+  await open(page);
+  // Global setup waits for the demo session to reach EXIT, so by test time the engine is idle:
+  // the panel must say so honestly and offer both ways to start a new session.
+  await expect(page.getByText("Right now").first()).toBeVisible();
+  await expect(page.getByText("IDLE").first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start paper session" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start demo replay" })).toBeVisible();
+  await expect(page.getByText(/No session is running/).first()).toBeVisible();
+  // Data freshness always carries a plain word, never just a number.
+  await expect(page.getByText(/Data (LIVE|DELAYED|STALE|NO DATA)/).first()).toBeVisible();
+});
+
+test("the plain-language trading guide is reachable for a new trader", async ({ page }) => {
+  await open(page);
+  const guide = page.getByRole("button", { name: /How RakshaQuant trades/ });
+  await expect(guide).toBeVisible();
+  await guide.click();
+  await expect(page.getByText("Market data arrives").first()).toBeVisible();
+  await expect(page.getByText(/Book A - no AI/).first()).toBeVisible();
+  await expect(page.getByText(/can only veto/i).first()).toBeVisible();
+});

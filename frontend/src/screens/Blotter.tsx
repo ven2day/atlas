@@ -8,6 +8,7 @@ import { useNavigate } from "react-router";
 
 import { get, type Query, type Schemas } from "../api/client";
 import { keys } from "../api/queries";
+import { EXIT_REASONS, ORDER_STATUSES } from "../lib/explain";
 import { Icon } from "../shell/icons";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -36,7 +37,7 @@ const ORDER_COLUMNS: Columns<Order> = [
   o.accessor("quantity", { header: "Qty", size: 80, meta: { align: "right" }, cell: (c) => <Qty value={c.getValue()} /> }),
   o.accessor("filled_qty", { header: "Filled", size: 84, meta: { align: "right" }, cell: (c) => <Qty value={c.getValue()} /> }),
   o.accessor("avg_fill_price", { header: "Avg fill", size: 104, meta: { align: "right" }, cell: (c) => <Price value={c.getValue()} /> }),
-  o.accessor("status", { header: "Status", size: 124, cell: (c) => <Badge>{c.getValue()}</Badge> }),
+  o.accessor("status", { header: "Status", size: 124, cell: (c) => <Badge title={ORDER_STATUSES[c.getValue()]?.plain}>{c.getValue()}</Badge> }),
   o.accessor("reason", { header: "Reason", size: 108 }),
   o.accessor("strategy", { header: "Strategy", size: 132 }),
   o.accessor("client_order_id", { header: "Order", size: 150, cell: (c) => <span className="font-mono text-xs text-fg-1">{c.getValue()}</span> }),
@@ -83,7 +84,7 @@ const TRADE_COLUMNS: Columns<Trade> = [
   t.accessor("quantity", { header: "Qty", size: 80, meta: { align: "right" }, cell: (c) => <Qty value={c.getValue()} /> }),
   t.accessor("entry_price", { header: "Entry", size: 104, meta: { align: "right" }, cell: (c) => <Price value={c.getValue()} /> }),
   t.accessor("exit_price", { header: "Exit", size: 104, meta: { align: "right" }, cell: (c) => <Price value={c.getValue()} /> }),
-  t.accessor("exit_reason", { header: "Exit reason", size: 132, cell: (c) => <Badge>{c.getValue()}</Badge> }),
+  t.accessor("exit_reason", { header: "Exit reason", size: 132, cell: (c) => <Badge title={EXIT_REASONS[c.getValue()]?.plain}>{c.getValue()}</Badge> }),
   t.accessor("gross_pnl", { header: "Gross", size: 116, meta: { align: "right" }, cell: (c) => <Money value={c.getValue()} pnl /> }),
   t.accessor("charges", { header: "Charges", size: 104, meta: { align: "right" }, cell: (c) => <Money value={c.getValue()} /> }),
   t.accessor("net_pnl", { header: "Net P&L", size: 128, meta: { align: "right" }, cell: (c) => <Money value={c.getValue()} pnl arrow /> }),

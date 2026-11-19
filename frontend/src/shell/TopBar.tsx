@@ -9,6 +9,7 @@ import { Link } from "react-router";
 import { get } from "../api/client";
 import { keys, useConfig, useSummary, useSystem } from "../api/queries";
 import { cx } from "../lib/cx";
+import { SESSION_STATES, dataFreshness } from "../lib/explain";
 import { duration } from "../lib/format";
 import { useUi } from "../lib/ui";
 import { Badge } from "../ui/Badge";
@@ -79,6 +80,7 @@ export function TopBar() {
 
   const ages = Object.entries(system?.quote_age_s ?? {}).sort((a, b) => a[1] - b[1]);
   const freshest = ages[0];
+  const freshness = dataFreshness(freshest ? freshest[1] : null);
   const reconciles = system?.last_reconcile ?? [];
   const drift = reconciles.some((r) => !r.in_sync);
   const open = summary?.market_open ?? false;
@@ -118,7 +120,7 @@ export function TopBar() {
             "lg:order-none lg:ml-2 lg:w-auto lg:flex-1 lg:py-0",
           )}
         >
-          <Reading icon="clock" label="Session">
+          <Reading icon="clock" label="Session" title={summary?.session?.state ? SESSION_STATES[summary.session.state]?.plain : undefined}>
             <span className="flex items-center gap-1.5">
               <span
                 aria-hidden="true"
@@ -129,15 +131,18 @@ export function TopBar() {
             </span>
           </Reading>
           <TimeIST value={summary?.now} label className="shrink-0 text-xs text-fg-1" />
-          <Reading icon="database" label="Data">
-            {freshest ? (
-              <span className={cx(freshest[1] > 1800 ? "text-warn" : "text-fg-0")}>
-                {freshest[0].toUpperCase()}
-                {freshest[1] > 60 && ` delayed ~${duration(freshest[1])}`}
-              </span>
-            ) : (
-              <span className="text-fg-2">no quotes</span>
-            )}
+          <Reading icon="database" label="Data" title={freshness.detail}>
+            <span
+              className={cx(
+                freshness.state === "stale" && "text-warn",
+                freshness.state === "none" && "text-fg-2",
+                (freshness.state === "live" || freshness.state === "delayed") && "text-fg-0",
+              )}
+            >
+              {freshest ? freshest[0].toUpperCase() : ""} {freshness.label}
+              {freshest && (freshness.state === "delayed" || freshness.state === "stale") &&
+                ` · ${duration(freshest[1])} old`}
+            </span>
           </Reading>
           <Reading icon="wallet" label="Broker" tone={drift ? "warn" : "plain"}>
             <span className="text-fg-0">SIM</span>
