@@ -93,6 +93,7 @@ class MarketService:
             extra={INDEX_KEY: INDEX_TICKER},
         )
         alert_failures(result, self._sink)
+        self._report_provenance(result)
         self._history = result
         self._closes = {k: Decimal(str(s.last_close)) for k, s in result.series.items()
                         if k != INDEX_KEY}  # fmt: skip
@@ -113,11 +114,43 @@ class MarketService:
             {k: s.last_close for k, s in result.series.items() if k != INDEX_KEY}
         )
 
+    def _report_provenance(self, result: HistoryResult) -> None:
+        """Surface reused-cache age and missing corporate-action adjustments - once per load.
+
+        Cached data is legitimate (settled daily bars do not change), but it must never pass as
+        freshly retrieved; and a series whose adjustment overlay failed keeps its WARNING so
+        nobody forgets its indicators run on raw closes.
+        """
+        if result.cached:
+            oldest = min(result.cached.values())
+            logger.info(
+                "daily history: reused cached candles for %d instrument(s), oldest fetched %s",
+                len(result.cached), oldest,
+            )  # fmt: skip
+        unadjusted = {k: v for k, v in result.adjustments.items() if v.startswith("unavailable")}
+        if unadjusted:
+            sample = sorted(unadjusted)[0]
+            self._sink.emit(
+                Alert(level="WARNING", key="history_unadjusted",
+                      message=f"{len(unadjusted)} instrument(s) have no corporate-action "
+                              f"adjustment ({sample}: {unadjusted[sample]}); their indicators "
+                              "run on raw closes"),
+                source="marketdata",
+            )  # fmt: skip
+
     def daily(self, instrument_key: str) -> DailySeries | None:
         return self._history.series.get(instrument_key)
 
     def index_series(self) -> DailySeries | None:
         return self._history.series.get(INDEX_KEY)
+
+    def index_status(self) -> tuple[DailySeries | None, str | None]:
+        """The NIFTY series, and when there is none, the specific reason why (for the regime
+        alert): a provider failure must name itself, not hide behind "no history"."""
+        series = self._history.series.get(INDEX_KEY)
+        if series is not None:
+            return series, None
+        return None, self._history.failed.get(INDEX_KEY) or "no index history was fetched"
 
     def is_lagging(self, instrument_key: str) -> bool:
         return instrument_key in self._history.lagging
@@ -227,8 +260,9 @@ def build_history_source(
     if settings.market_data_provider != "dhan":
         return YFinanceHistorySource(**yfinance_kwargs)
 
+    from src.marketdata.adjustments import YahooCorporateActions
     from src.marketdata.dhan.history import DhanHistorySource
-    from src.marketdata.dhan.setup import build_client, security_overrides
+    from src.marketdata.dhan.setup import build_client, build_history_cache, security_overrides
 
     overrides = security_overrides(settings)
     index_instrument = dhan_index_instrument(overrides)
@@ -236,6 +270,12 @@ def build_history_source(
         "client": build_client(settings),
         "tape": tape,
         "overrides": overrides,
+        # Dhan's budget is per account and shared across processes; settled daily candles are
+        # cached so a research run and the engine never re-buy the same window twice.
+        "cache": build_history_cache(settings),
+        # Dhan serves no corporate actions: the adjustment table comes from Yahoo, separately
+        # sourced and labelled (see src/marketdata/adjustments.py).
+        "adjustments": YahooCorporateActions(),
     }
     if lookback_days is not None:
         dhan_kwargs["lookback_days"] = lookback_days
@@ -244,4 +284,7 @@ def build_history_source(
         secondary=YFinanceHistorySource(**yfinance_kwargs),  # the NIFTY index, for the regime
         secondary_keys=set() if index_instrument is not None else {INDEX_KEY},
         extra_instruments=[index_instrument] if index_instrument is not None else [],
+        # Even when DHAN_SECURITY_IDS routes the index to Dhan, keep Yahoo as its fallback: a
+        # Dhan rate limit must not leave the regime unknown while a secondary source exists.
+        secondary_fallback_keys={INDEX_KEY} if index_instrument is not None else set(),
     )

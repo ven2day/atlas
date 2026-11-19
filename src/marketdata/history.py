@@ -126,6 +126,12 @@ class HistoryResult:
     # key -> last settled date, for series that end before the expected previous session
     # (Yahoo sometimes leaves the latest daily close NaN for hours after the close).
     lagging: dict[str, date] = field(default_factory=dict)
+    # key -> when the reused cached candles were originally fetched (ISO, UTC). A cache hit is
+    # always labelled with its age; cached data is never presented as freshly retrieved.
+    cached: dict[str, str] = field(default_factory=dict)
+    # key -> adjustment provenance, e.g. "yahoo_corporate_actions: 3 dividend(s)" or
+    # "unavailable: <reason>" (the series then stays raw and the caller keeps saying so).
+    adjustments: dict[str, str] = field(default_factory=dict)
 
     def prev_closes(self) -> dict[str, float]:
         return {key: s.last_close for key, s in self.series.items()}

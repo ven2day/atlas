@@ -220,10 +220,65 @@ class Ingestor(Protocol):
     async def poll(self, *, force: bool = False) -> PollStats: ...
 
 
+class Classifier(Protocol):
+    async def classify(self, announcement: AnnouncementReceived) -> TypedEvent: ...
+
+
+class RuleEventClassifier:
+    """The deterministic fallback for when **no** decision model is configured (no local Laya,
+    no remote Jev key). It applies exactly the subject rules :class:`EventClassifier` uses -
+    NSE's own ``SUBJECT`` category when it is unambiguous, plus deterministic date extraction -
+    and nothing more:
+
+    * ``direction`` and ``materiality`` stay ``None`` (UNKNOWN). Rules cannot read the text, and
+      inventing a direction or materiality from a category the rule table does not pin down is
+      exactly the fabrication the mapping module refuses.
+    * ``model`` is labelled ``subject_rules`` (or ``none`` when even the rules cannot place the
+      type), and ``extra.classifier`` marks every event as rule-derived, so a rule reading can
+      never be mistaken for a model reading downstream.
+    * An announcement the rules cannot classify is still emitted - relevant, untyped, visible -
+      never dropped.
+    """
+
+    def __init__(self, *, sink: EventSink, clock: Clock) -> None:
+        self._sink = sink
+        self._clock = clock
+
+    async def classify(self, announcement: AnnouncementReceived) -> TypedEvent:
+        rule = subject_type(announcement.subject, announcement.title)
+        published = announcement.published_at
+        extra: dict[str, JsonValue] = {
+            "subject": announcement.subject,
+            "type_source": "exchange_subject" if rule else "unclassified",
+            "classifier": "rule_fallback",
+            # Without a model there is no relevance reading either: the event stays visible to
+            # the gates rather than being filtered on a guess.
+            "relevant_basis": "kept_visible_no_model",
+        }
+        if rule is AnnouncementType.RESULTS_DATE:
+            meeting = extract_event_date(announcement.title, published.astimezone(IST).date())
+            if meeting is not None:
+                extra["event_date"] = meeting.isoformat()
+        elif rule is AnnouncementType.RESULTS:
+            extra["event_date"] = published.astimezone(IST).date().isoformat()
+        event = TypedEvent(
+            event_id=announcement.announcement_id, instrument_key=announcement.instrument_key,
+            published_at=published, title=announcement.title, url=announcement.url,
+            source=announcement.source, relevant=True, announcement_type=rule,
+            direction=None, materiality=None, probabilities={},
+            model="subject_rules" if rule else "none", calibrated=False,
+            classified_at=self._clock.now(), extra=extra,
+        )  # fmt: skip
+        self._sink.emit(event, source="decision_models")
+        return event
+
+
 class AnnouncementPipeline:
     """The engine's ``announcements`` task: ingest new announcements, then classify each.
 
-    Without a classifier (no decision model available) announcements are still stored; they are
+    The classifier is the model cascade when one is configured, else the deterministic
+    :class:`RuleEventClassifier` fallback (rule-derived type only; direction and materiality
+    stay UNKNOWN). Only with no classifier at all are announcements merely stored, to be
     classified later from the ``backlog``. A classification failure is logged, never raised, and
     never holds back ingestion."""
 
@@ -231,7 +286,7 @@ class AnnouncementPipeline:
         self,
         *,
         ingestor: Ingestor,
-        classifier: EventClassifier | None,
+        classifier: Classifier | None,
         backlog: Iterable[AnnouncementReceived] = (),
     ) -> None:
         self._ingestor = ingestor

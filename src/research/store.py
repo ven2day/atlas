@@ -263,18 +263,25 @@ class ResearchStore:
 
         Deduplicated on the stable ``record_id``, so re-importing the same file is a no-op. An
         existing record whose ``content_hash`` differs is left alone and reported as a duplicate:
-        the first receipt wins, and a correction arrives as a new record, not an overwrite.
+        the first receipt wins, and the changed content is appended to
+        ``research_record_revisions`` rather than overwriting anything.
+
+        ``received_at_utc`` is the receipt time the record itself carries when it has one (the
+        live RSS collector's own timestamp); only a record without one falls back to the import
+        time. ``imported_at_utc`` is always this process's wall clock: nothing is backdated.
         """
-        stamp = _utc(imported_at or datetime.now(UTC))
+        now = imported_at or datetime.now(UTC)
+        stamp = _utc(now)
         materialised = list(records)
         if not materialised:
             return (0, 0, 0)
         ids = [r.record_id for r in materialised]
         placeholders = ",".join("?" * len(ids))
         existing = {
-            row["record_id"]
+            row["record_id"]: str(row["content_hash"])
             for row in self.query(
-                f"SELECT record_id FROM research_source_records WHERE record_id IN ({placeholders})",
+                f"SELECT record_id, content_hash FROM research_source_records"
+                f" WHERE record_id IN ({placeholders})",
                 ids,
             )
         }
@@ -284,13 +291,37 @@ class ResearchStore:
             if not record.symbol or record.published_at is None:
                 rejected += 1
                 continue
-            if record.record_id in existing:
+            prior_hash = existing.get(record.record_id)
+            if prior_hash is not None:
+                if prior_hash != record.content_hash:
+                    statements.append(
+                        (
+                            "INSERT INTO research_record_revisions (revision_id, record_id,"
+                            " content_hash, raw, import_batch, observed_at_utc)"
+                            " VALUES (?,?,?,?,?,?)"
+                            " ON CONFLICT(revision_id) DO NOTHING",
+                            (
+                                # One row per distinct observed content version: re-saving the
+                                # same changed content adds nothing (the history is of versions,
+                                # not of sync runs).
+                                hashlib.sha256(
+                                    f"{record.record_id}|{record.content_hash}".encode()
+                                ).hexdigest()[:32],
+                                record.record_id,
+                                record.content_hash,
+                                json.dumps(record.raw, sort_keys=True, default=str),
+                                batch,
+                                stamp,
+                            ),
+                        )
+                    )
                 continue
             statements.append(
                 (
                     "INSERT INTO research_source_records (record_id, source, source_id, symbol,"
                     " event_type, published_at_utc, received_at_utc, document_url, raw,"
-                    " content_hash, import_batch, imported_at_utc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    " content_hash, import_batch, imported_at_utc, capture_kind)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         record.record_id,
                         record.source,
@@ -298,21 +329,72 @@ class ResearchStore:
                         record.symbol,
                         record.event_type,
                         _utc(record.published_at),
-                        # The receipt time is *now*, never the publication time: a record imported
-                        # today is recorded as received today, however old the announcement is.
-                        stamp,
+                        # The receipt time is the recorded observation when the source carries
+                        # one, else *now* - never the publication time, however old the record.
+                        _utc(record.received_at) if record.received_at is not None else stamp,
                         record.document_url,
                         json.dumps(record.raw, sort_keys=True, default=str),
                         record.content_hash,
                         batch,
                         stamp,
+                        record.capture_kind,
                     ),
                 )
             )
-            existing.add(record.record_id)
+            existing[record.record_id] = record.content_hash
         self._write(statements)
-        duplicates = len(materialised) - rejected - len(statements)
-        return (len(statements), duplicates, rejected)
+        duplicates = (
+            len(materialised)
+            - rejected
+            - sum(1 for sql, _ in statements if "research_source_records" in sql)
+        )
+        return (
+            sum(1 for sql, _ in statements if "research_source_records" in sql),
+            duplicates,
+            rejected,
+        )
+
+    def record_revisions(self, record_id: str) -> list[dict[str, Any]]:
+        """The changed-content history of one record, oldest observation first."""
+        return self.query(
+            "SELECT * FROM research_record_revisions WHERE record_id=?"
+            " ORDER BY julianday(observed_at_utc)",
+            (record_id,),
+        )
+
+    def save_coverage_gaps(self, gaps: Iterable[Mapping[str, Any]]) -> int:
+        """Persist collector coverage gaps. Idempotent on ``(source, gap_from, gap_to, reason)``."""
+        statements: list[tuple[str, Sequence[Any]]] = []
+        for gap in gaps:
+            key = f"{gap['source']}|{_ts(gap['gap_from'])}|{_ts(gap['gap_to'])}|{gap['reason']}"
+            statements.append(
+                (
+                    "INSERT INTO research_coverage_gaps (gap_id, source, gap_from, gap_to,"
+                    " reason, recorded_at_utc) VALUES (?,?,?,?,?,?)"
+                    " ON CONFLICT(gap_id) DO NOTHING",
+                    (
+                        hashlib.sha256(key.encode()).hexdigest()[:32],
+                        str(gap["source"]),
+                        _ts(gap["gap_from"]),
+                        _ts(gap["gap_to"]),
+                        str(gap["reason"]),
+                        _utc(datetime.now(UTC)),
+                    ),
+                )
+            )
+        return self._write(statements)
+
+    def coverage_gaps(self, *, source: str | None = None, limit: int = 500) -> list[dict[str, Any]]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if source is not None:
+            clauses.append("source = ?")
+            params.append(source)
+        params.append(limit)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        return self.query(
+            f"SELECT * FROM research_coverage_gaps{where} ORDER BY gap_from LIMIT ?", params
+        )
 
     def begin_import(
         self, *, source: str, range_from: date, range_to: date, symbols: Sequence[str]

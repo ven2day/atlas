@@ -103,7 +103,12 @@ to Jev to measure agreement, unused.
 - **Thresholds:** book B vetoes when the calibrated P(veto) reaches the book's threshold in
   `src/config/experiment.yaml` (0.6).
 - **Check:** the AI Desk shows each model's latency, escalation rate and calibration status.
-  The `decision_models_unavailable` alert means no model could load, and book B abstains.
+  The `decision_models_unavailable` alert (emitted once at startup, not per cycle) means no
+  model could load. Announcements are then classified by the deterministic NSE subject rules
+  only: the event type comes from the exchange's own category when unambiguous, while direction
+  and materiality stay UNKNOWN and book B effectively abstains. The alert message names the two
+  ways to enable a model: the local Laya (`uv sync --extra decision-local`,
+  `DECISION_LAYA_ENABLED=true`) or the remote Jev (`TYPESAFE_API_KEY`).
 
 Every answer is cached by state and questions, so replays reproduce book B without running a
 model.

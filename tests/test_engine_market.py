@@ -13,7 +13,12 @@ from src.domain.events import Alert
 from src.domain.sink import RecordingSink
 from src.domain.types import MarketDataSource, OrderStatus, OrderType, Product, Quote, Side
 from src.engine.market import INDEX_KEY, MarketService
-from src.marketdata.history import parse_daily_frame, record_history, series_from_bars
+from src.marketdata.history import (
+    HistoryResult,
+    parse_daily_frame,
+    record_history,
+    series_from_bars,
+)
 from src.marketdata.replay import TapeHistorySource, TapeQuoteSource
 from src.oms.oms import OMS
 from src.oms.position_book import PositionBook
@@ -162,3 +167,39 @@ async def test_the_market_service_feeds_listeners_in_order_and_isolates_failures
     assert facts.quote is not None and facts.atr == Decimal(str(f.atr_14))
     assert facts.data_source is MarketDataSource.YFINANCE and facts.adv_shares == f.adv20_shares
     assert service.marks() == {INFY.key: Decimal("101.0")}
+
+
+async def test_index_status_names_the_specific_cause_when_nifty_history_is_missing():
+    """The regime alert must say *why* the index is missing (both providers' reasons), not just
+    "no history" - a rate limit is an outage to report, not an absence of data."""
+
+    class NoIndex:
+        async def fetch(self, instruments, *, settled_before, expected_last, extra=None):
+            return HistoryResult(
+                series={},
+                failed={INDEX_KEY: "dhan /charts/historical: rate limited (HTTP 429) | "
+                                   "^NSEI: no data returned"},
+            )  # fmt: skip
+
+    clock = ReplayClock(T0)
+    sink = RecordingSink(clock)
+    service = MarketService(instruments={}, quotes=TapeQuoteSource([], clock=clock),
+                            history=NoIndex(), sink=sink)  # fmt: skip
+    await service.load_history(TODAY, None)
+    series, cause = service.index_status()
+    assert series is None
+    assert cause is not None and "rate limited (HTTP 429)" in cause and "no data returned" in cause
+    assert f"history_missing:{INDEX_KEY}" in [a.key for a in sink.payloads(Alert)]
+
+
+async def test_index_status_without_any_failure_reason_says_the_index_was_not_fetched():
+    class Empty:
+        async def fetch(self, instruments, *, settled_before, expected_last, extra=None):
+            return HistoryResult(series={})
+
+    clock = ReplayClock(T0)
+    service = MarketService(instruments={}, quotes=TapeQuoteSource([], clock=clock),
+                            history=Empty(), sink=RecordingSink(clock))  # fmt: skip
+    await service.load_history(TODAY, None)
+    series, cause = service.index_status()
+    assert series is None and cause == "no index history was fetched"

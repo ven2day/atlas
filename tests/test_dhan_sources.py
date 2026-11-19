@@ -300,3 +300,52 @@ async def test_the_composite_routes_the_index_to_the_secondary_source() -> None:
     assert not Primary.seen["extra"]  # the index never reaches the Dhan source
     assert Secondary.seen["instruments"] == []
     assert Secondary.seen["extra"] == {INDEX_KEY: "^NSEI"}
+
+
+class _Scripted:
+    def __init__(self, result: HistoryResult) -> None:
+        self.result = result
+        self.seen: dict[str, Any] = {}
+
+    async def fetch(
+        self, instruments: Any, *, settled_before: Any, expected_last: Any, extra: Any = None
+    ) -> HistoryResult:
+        self.seen["extra"] = dict(extra or {})
+        return self.result
+
+
+async def test_a_dhan_index_failure_falls_back_to_the_secondary_source() -> None:
+    """The regime must not go UNKNOWN because Dhan rate-limited, while Yahoo can serve the index:
+    a key routed to the primary but listed as a fallback key is re-answered by the secondary."""
+    primary = _Scripted(
+        HistoryResult(
+            series={INFY.key: _series(INFY.key)},
+            failed={INDEX_KEY: "dhan /charts/historical: rate limited (HTTP 429)"},
+        )
+    )
+    secondary = _Scripted(HistoryResult(series={INDEX_KEY: _series(INDEX_KEY)}))
+    composite = CompositeHistorySource(
+        primary=primary, secondary=secondary, secondary_keys=set(),
+        secondary_fallback_keys={INDEX_KEY},
+    )  # fmt: skip
+    result = await composite.fetch(
+        [INFY], settled_before=SETTLED_BEFORE, expected_last=None, extra={INDEX_KEY: "^NSEI"}
+    )
+    assert secondary.seen["extra"] == {INDEX_KEY: "^NSEI"}  # the fallback was actually fetched
+    assert INDEX_KEY in result.series and result.failed == {}
+    assert result.series[INDEX_KEY].source is MarketDataSource.YFINANCE  # labelled, not blended
+
+
+async def test_when_both_sources_fail_the_reasons_are_joined_not_hidden() -> None:
+    primary = _Scripted(HistoryResult(series={}, failed={INDEX_KEY: "rate limited (HTTP 429)"}))
+    secondary = _Scripted(HistoryResult(series={}, failed={INDEX_KEY: "no data returned"}))
+    composite = CompositeHistorySource(
+        primary=primary, secondary=secondary, secondary_keys=set(),
+        secondary_fallback_keys={INDEX_KEY},
+    )  # fmt: skip
+    result = await composite.fetch(
+        [], settled_before=SETTLED_BEFORE, expected_last=None, extra={INDEX_KEY: "^NSEI"}
+    )
+    assert result.series == {}
+    reason = result.failed[INDEX_KEY]
+    assert "rate limited (HTTP 429)" in reason and "no data returned" in reason
