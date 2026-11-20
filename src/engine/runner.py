@@ -63,6 +63,7 @@ from src.engine.tasks import (
 from src.evaluation.shadow_ledger import ShadowLedger
 from src.features.regime import RegimeConfig, compute_regime
 from src.features.technical import as_date
+from src.marketdata.news import NewsPollStats
 from src.oms.exit_manager import ExitManager
 from src.oms.oms import OMS
 from src.oms.position_book import PositionBook
@@ -106,7 +107,7 @@ class NewsSource(Protocol):
     @property
     def interval_s(self) -> float: ...
 
-    async def poll(self, *, force: bool = False) -> tuple[object, Sequence[object]]: ...
+    async def poll(self, *, force: bool = False) -> tuple[NewsPollStats, Sequence[object]]: ...
 
 
 @dataclass(frozen=True)
@@ -248,6 +249,19 @@ class Engine:
                 self.sink.emit(Alert(level="WARNING", key="announcements_backfill_failed",
                                      message=f"{type(exc).__name__}: {exc}"),
                                source="engine")  # fmt: skip
+        if self.news is not None:
+            # News is collected from PRE_OPEN on, not from the market open: overnight headlines
+            # matter before the session trades, and an evening or weekend run (which never
+            # leaves PRE_OPEN) must still collect - otherwise verified feeds sit at zero items
+            # with no log line explaining why.
+            try:
+                await self.news_step(force=True)
+            except Exception as exc:
+                logger.exception("news backfill failed")
+                self.sink.emit(Alert(level="WARNING", key="news_backfill_failed",
+                                     message=f"{type(exc).__name__}: {exc}"),
+                               source="engine")  # fmt: skip
+            self.tasks.start(NEWS, self.news_step, lambda: self.news.interval_s)  # type: ignore[union-attr]
 
     async def on_state(self, state: SessionState, schedule: Schedule) -> None:
         if state in _IN_SESSION and not self._session_started:
@@ -324,7 +338,12 @@ class Engine:
         """Collect and classify news. Research/visibility only: no order path reads this."""
         if self.news is None:
             return
-        await self.news.poll(force=force)
+        stats, classified = await self.news.poll(force=force)
+        logger.info(
+            "news poll: %d feed(s) polled, %d item(s) collected, %d reading(s) classified "
+            "(store events; see the News screen or GET /api/news)",
+            len(stats.feeds), len(stats.new), len(classified),
+        )  # fmt: skip
 
     async def announcements_step(self, *, force: bool = False) -> None:
         """Ingest and classify; alert (never exit) on an adverse event for a held position."""

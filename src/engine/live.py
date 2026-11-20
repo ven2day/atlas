@@ -276,6 +276,11 @@ def _news(
     if not fetchable:
         logger.info("news: no enabled+verified feeds in the registry; the task stays off")
         return None
+    logger.info(
+        "news collector configured: feeds=%s store=%s environment=%s "
+        "(events land in this store; the console reads them via GET /api/news)",
+        ", ".join(f.key for f in fetchable), settings.db_path, settings.environment,
+    )  # fmt: skip
     sink.emit(Alert(level="INFO", key="news_feeds_active",
                     message=f"polling {len(fetchable)} news feed(s): "
                             f"{', '.join(f.key for f in fetchable)}"),
