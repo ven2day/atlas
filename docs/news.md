@@ -24,9 +24,12 @@ src/decision_models/tasks/news.py   NewsClassifier: rule floor, configured casca
 └───────────────┴────────────────────┴──────────────────────────────┘
 ```
 
-The engine runs the collector as its own periodic task (`news`, beside `announcements`) during a
-live paper session only. Demo/replay sessions never fetch: no news events exist on a tape, and
-the screen says so.
+The engine runs the collector as its own periodic task (`news`, beside `announcements`), started
+at **PRE_OPEN** - not at the market open: overnight headlines matter before the session trades,
+and an evening or weekend run never leaves PRE_OPEN, so a task that started only at OPEN would
+silently never poll. The pre-open hook also runs one forced backfill poll (like announcements),
+and a backfill failure raises a `news_backfill_failed` WARNING without blocking the session.
+Demo/replay sessions never fetch: no news events exist on a tape, and the screen says so.
 
 The NSE announcements feed is **not** re-fetched here. It is owned by
 `src/marketdata/announcements.py` (`AnnouncementIngestor`) with its own coverage-gap behaviour,
@@ -133,6 +136,21 @@ Classifier internals (model, rules version, evidence, uncertainties, ids) live i
 | `NEWS_FEEDS_FILE` | `src/config/news_feeds.yaml` | The registry |
 | `NEWS_MAX_RESPONSE_BYTES` | `2000000` | Hard cap per feed response |
 | `NEWS_FETCH_TIMEOUT_S` | `15` | Per-feed fetch timeout |
+
+## Observability
+
+Every poll logs its shape so "no items" is never mysterious:
+
+- at startup: `news collector configured: feeds=... store=... environment=...` (the exact store
+  the console reads via `GET /api/news`), plus an INFO alert `news_feeds_active` listing feeds,
+  and `news_feeds_unverified` naming enabled-but-unverified feeds that stay disabled;
+- per poll: `news poll starting: N of M configured feed(s) due (...)`, then per feed either
+  `fetched X item(s), Y new`, `unchanged (304), 0 new item(s)`, or `FAILED (<reason>)`;
+- per step: `news poll: N feed(s) polled, X item(s) collected, Y reading(s) classified`.
+
+Feed failures additionally emit one `news_feed_down:<key>` WARNING alert and one
+`NewsCoverageGap` per failure episode (recovery emits an INFO alert), and
+`GET /api/news/feeds` reports the resulting status.
 
 ## Known limitations
 

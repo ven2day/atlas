@@ -445,8 +445,22 @@ class NewsCollector:
         ]
         if not due:
             return NewsPollStats(ok=True)
+        logger.info(
+            "news poll starting: %d of %d configured feed(s) due (%s)",
+            len(due), len(self._feeds), ", ".join(f.key for f in due),
+        )  # fmt: skip
         semaphore = asyncio.Semaphore(self._concurrency)
         results = await asyncio.gather(*(self._poll_feed(f, now, semaphore) for f in due))
+        for result in results:
+            if result.error is not None:
+                logger.warning("news feed %s: FAILED (%s)", result.key, result.error)
+            elif result.not_modified:
+                logger.info("news feed %s: unchanged (304), 0 new item(s)", result.key)
+            else:
+                logger.info(
+                    "news feed %s: fetched %d item(s), %d new",
+                    result.key, result.fetched, len(result.new),
+                )  # fmt: skip
         stats = NewsPollStats(ok=all(r.ok for r in results), feeds=list(results))
         for result in results:
             stats.new.extend(result.new)
