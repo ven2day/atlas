@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 
 import { decisionId, open } from "./helpers";
 
-const PATHS = ["/", "/decisions", "/blotter", "/risk", "/ai", "/research", "/experiment", "/market?symbol=TCS", "/system"];
+const PATHS = ["/", "/decisions", "/blotter", "/risk", "/ai", "/research", "/news", "/experiment", "/market?symbol=TCS", "/system"];
 
 async function scan(page: import("@playwright/test").Page) {
   // Measure the settled UI, not the deliberately translucent opening-animation frame.

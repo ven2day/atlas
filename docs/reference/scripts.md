@@ -26,4 +26,5 @@ Entry points in `scripts/`, run from the repo root with `uv run python scripts/<
 | `setup.py` | Guided one-command setup for RakshaQuant. |
 | `test_dhan_connection.py` | DhanHQ Connection Test |
 | `validate_strategy.py` | Validate strategies before risking capital (plan M11.2): backtest the paper engine itself over daily history (``src/backtesting/session.py``) and apply the edge gate (``src/backtesting/edge.py``): VALIDATED needs at least 200 closed trades **and** a 95% bootstrap CI of the mean net return per trade above zero. |
+| `verify_news_feeds.py` | Verify the configured news RSS feeds (owner-run; the only news tool that touches the network). |
 | `install_windows_task.ps1` (PowerShell) | Register the RakshaQuant paper session and its dead-man check with Windows Task Scheduler (plan M12.4). |

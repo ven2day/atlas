@@ -51,6 +51,7 @@ for _topic, _types in {
     "ai": ("LLMCall", "DecisionModelCall", "BudgetThresholdCrossed", "TradeReview"),
     "market": ("QuoteReceived", "QuoteRejected", "BarClosed", "DataSourceChanged", "FeedStale",
                "FeedRecovered", "AnnouncementReceived", "AnnouncementCoverageGap",
+               "NewsItemReceived", "NewsClassified", "NewsCoverageGap",
                "RegimeComputed", "TypedEvent"),
     "system": ("SessionStateChanged", "HolidaySkipped", "Heartbeat", "LoopLag", "Alert",
                "ProcessStarted", "ProcessStopped"),

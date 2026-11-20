@@ -20,7 +20,7 @@ import platform
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -38,6 +38,9 @@ from src.domain.events import (
     Heartbeat,
     LLMOutcome,
     MarkToMarket,
+    NewsClassified,
+    NewsCoverageGap,
+    NewsItemReceived,
     OrderSubmitted,
     ProcessStarted,
     ReconciliationResult,
@@ -64,6 +67,7 @@ from src.evaluation.daily_report import resting, slippage_bps, veto_precision_of
 from src.evaluation.experiment import DEFAULT_EXPERIMENT_PATH, ExperimentConfig, load_experiment
 from src.llm.prompts import templates
 from src.llm.registry import role_configs
+from src.marketdata.news import FeedError, load_news_feeds
 from src.oms.exit_manager import ManagedPosition
 from src.ops.logging_config import redact
 from src.research.snapshot import DISCLAIMER, load_snapshot
@@ -100,6 +104,10 @@ from src.web.models import (
     LLMCallRow,
     LogLine,
     ModelHealth,
+    NewsFeedRow,
+    NewsReadingRow,
+    NewsRow,
+    NewsSymbolRow,
     OrderRow,
     PositionRow,
     ReconcileRow,
@@ -798,6 +806,146 @@ class Queries:
             ))  # fmt: skip
             if len(out) >= limit:
                 break
+        return out
+
+    # -- news (event-driven research; visibility only, never an order path) ---------------------
+
+    def news(self, *, symbol: str | None, category: str | None, direction: str | None,
+             source: str | None, day: date | None, limit: int) -> list[NewsRow]:  # fmt: skip
+        """Collected news items and every reading of them, newest publication first.
+
+        Reads the stored events directly (like decisions and typed events): items come from the
+        news collector, readings from the news classifier. An item nobody has read yet is still
+        returned with empty readings - "collected, unclassified" is a state worth showing, not
+        hiding. Category/direction filters keep only items with a matching reading; the symbol
+        filter also matches *unresolved* mentions, because a trader asking for a symbol should
+        see an ambiguous mention (labelled unresolved) rather than miss it.
+        """
+        items: dict[str, NewsItemReceived] = {}
+        order: list[str] = []
+        for e in self.store.read(types=[NewsItemReceived.event_type]):
+            p = e.payload
+            if isinstance(p, NewsItemReceived) and p.news_id not in items:
+                items[p.news_id] = p
+                order.append(p.news_id)
+        readings: dict[str, list[NewsReadingRow]] = defaultdict(list)
+        for e in self.store.read(types=[NewsClassified.event_type]):
+            p = e.payload
+            if not isinstance(p, NewsClassified):
+                continue
+            readings[p.news_id].append(NewsReadingRow(
+                news_id=p.news_id, instrument_key=p.instrument_key, symbol=p.symbol,
+                category=p.category.value, direction=p.direction.value, impact=p.impact.value,
+                horizon=p.horizon.value, confidence=p.confidence,
+                confidence_basis=p.confidence_basis, rationale=p.rationale,
+                evidence=list(p.evidence), uncertainties=list(p.uncertainties),
+                relevant=p.relevant, model=p.model, rules_version=p.rules_version,
+                classified_at=p.classified_at,
+            ))  # fmt: skip
+        out: list[NewsRow] = []
+        for news_id in order:
+            item = items[news_id]
+            if source is not None and item.source_key != source:
+                continue
+            if day is not None and item.published_at.astimezone(IST).date() != day:
+                continue
+            item_readings = readings.get(news_id, [])
+            if category is not None and not any(r.category == category for r in item_readings):
+                continue
+            if direction is not None and not any(r.direction == direction for r in item_readings):
+                continue
+            if symbol is not None:
+                wanted = symbol.upper()
+                if not (
+                    any(r.symbol == wanted for r in item_readings)
+                    or any(m.symbol.upper() == wanted for m in item.symbols)
+                ):
+                    continue
+            out.append(NewsRow(
+                news_id=item.news_id, source_key=item.source_key, source_name=item.source_name,
+                source_type=item.source_type, title=item.title, summary=item.summary,
+                url=item.url, published_at=item.published_at, received_at=item.received_at,
+                duplicate_of=item.duplicate_of,
+                symbols=[NewsSymbolRow(symbol=m.symbol, instrument_key=m.instrument_key,
+                                       evidence=m.evidence, resolved=m.resolved)
+                         for m in item.symbols],
+                readings=sorted(item_readings, key=lambda r: r.symbol),
+            ))  # fmt: skip
+        out.sort(key=lambda r: r.published_at, reverse=True)
+        return out[:limit]
+
+    def news_feeds(self) -> list[NewsFeedRow]:
+        """Per-feed health from the registry and the recorded events.
+
+        A failed feed is never presented as an empty one: when the newest recorded alert for a
+        feed is a failure, its status is ``failing`` (with the error), and coverage gaps are
+        counted next to the items. An unreadable registry is reported as its own row rather
+        than as "no feeds"."""
+        try:
+            feeds = load_news_feeds(self.settings.news_feeds_file)
+        except FeedError as exc:
+            return [NewsFeedRow(key="registry", name="feed registry", type="media_news",
+                                enabled=False, verified=None, owned_by=None, status="invalid",
+                                last_item_at=None, items_total=0, gaps=0,
+                                last_error=str(exc))]  # fmt: skip
+        counts: Counter[str] = Counter()
+        last_item: dict[str, datetime] = {}
+        for e in self.store.read(types=[NewsItemReceived.event_type]):
+            p = e.payload
+            if isinstance(p, NewsItemReceived):
+                counts[p.source_key] += 1
+                prior = last_item.get(p.source_key)
+                if prior is None or p.received_at > prior:
+                    last_item[p.source_key] = p.received_at
+        gaps: Counter[str] = Counter()
+        for e in self.store.read(types=[NewsCoverageGap.event_type]):
+            p = e.payload
+            if isinstance(p, NewsCoverageGap):
+                gaps[p.source_key] += 1
+        # The newest down/recovered alert per feed (rows arrive newest-first; setdefault keeps
+        # the newest state each feed was seen in).
+        feed_state: dict[str, tuple[str, str]] = {}
+        rows = self.store.query(
+            "SELECT payload FROM events WHERE type = 'Alert' ORDER BY seq DESC LIMIT 500"
+        )
+        for r in rows:
+            try:
+                payload = json.loads(r["payload"])
+            except (TypeError, ValueError):
+                continue
+            key = str(payload.get("key") or "")
+            message = str(payload.get("message") or "")
+            if key.startswith("news_feed_down:"):
+                feed_state.setdefault(key[len("news_feed_down:") :], ("down", message))
+            elif key.startswith("news_feed_recovered:"):
+                feed_state.setdefault(key[len("news_feed_recovered:") :], ("up", ""))
+        now = self.clock.now()
+        out: list[NewsFeedRow] = []
+        for feed in feeds:
+            total = counts.get(feed.key, 0)
+            last = last_item.get(feed.key)
+            state = feed_state.get(feed.key)
+            failing = state is not None and state[0] == "down"
+            if feed.owned_by is not None:
+                status = "owned"
+            elif not feed.enabled:
+                status = "disabled"
+            elif not feed.verified:
+                status = "unverified"
+            elif failing:
+                status = "failing"
+            elif total == 0:
+                status = "empty"
+            elif last is not None and now - last > timedelta(hours=48):
+                status = "quiet"
+            else:
+                status = "active"
+            out.append(NewsFeedRow(
+                key=feed.key, name=feed.name, type=feed.type, enabled=feed.enabled,
+                verified=feed.verified, owned_by=feed.owned_by, status=status,
+                last_item_at=last, items_total=total, gaps=gaps.get(feed.key, 0),
+                last_error=state[1] if state is not None and state[0] == "down" else None,
+            ))  # fmt: skip
         return out
 
     # -- research (event-aware candidates) ----------------------------------------------------

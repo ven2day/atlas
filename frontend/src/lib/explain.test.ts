@@ -5,9 +5,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   BOOKS,
+  CONFIDENCE_BASIS,
   DISPOSITIONS,
   EXIT_REASONS,
+  FEED_STATUS,
+  NEWS_CATEGORIES,
+  NEWS_DIRECTIONS,
+  NEWS_HORIZONS,
+  NEWS_IMPACTS,
+  NEWS_SOURCE_TYPES,
   ORDER_STATUSES,
+  READING_STATUS,
   REASON_CODES,
   RISK_OUTCOMES,
   SESSION_STATES,
@@ -87,8 +95,41 @@ describe("the glossary covers every backend value", () => {
       expect(STRATEGIES[s], s).toBeDefined();
     }
   });
+  it("the news taxonomy (NewsCategory/Direction/Impact/Horizon)", () => {
+    const categories = [
+      "results_guidance", "contract_order", "acquisition", "corporate_action", "board_meeting",
+      "regulatory_legal", "credit_rating", "promoter_insider", "macro_policy", "market_wide",
+      "rumor", "other", "unknown",
+    ];
+    for (const v of categories) expect(NEWS_CATEGORIES[v], v).toBeDefined();
+    for (const v of ["bullish", "bearish", "mixed", "neutral", "unknown"]) {
+      expect(NEWS_DIRECTIONS[v], v).toBeDefined();
+    }
+    for (const v of ["low", "medium", "high", "unknown"]) expect(NEWS_IMPACTS[v], v).toBeDefined();
+    for (const v of ["intraday", "sessions_1_3", "swing", "unknown"]) {
+      expect(NEWS_HORIZONS[v], v).toBeDefined();
+    }
+    for (const v of ["media_news", "macro", "exchange_filing"]) {
+      expect(NEWS_SOURCE_TYPES[v], v).toBeDefined();
+    }
+  });
+  it("feed health states and reading statuses", () => {
+    for (const v of ["active", "quiet", "failing", "empty", "disabled", "unverified", "owned", "invalid"]) {
+      expect(FEED_STATUS[v], v).toBeDefined();
+    }
+    for (const v of ["catalyst_watch", "unclear", "not_relevant"]) {
+      expect(READING_STATUS[v], v).toBeDefined();
+    }
+    for (const v of ["rule", "model", "model_calibrated", "none"]) {
+      expect(CONFIDENCE_BASIS[v], v).toBeDefined();
+    }
+  });
   it("every entry has a label and a plain sentence", () => {
-    for (const table of [DISPOSITIONS, VERDICTS, RISK_OUTCOMES, ORDER_STATUSES, EXIT_REASONS, SESSION_STATES, BOOKS, STRATEGIES]) {
+    for (const table of [
+      DISPOSITIONS, VERDICTS, RISK_OUTCOMES, ORDER_STATUSES, EXIT_REASONS, SESSION_STATES,
+      BOOKS, STRATEGIES, NEWS_CATEGORIES, NEWS_DIRECTIONS, NEWS_IMPACTS, NEWS_HORIZONS,
+      NEWS_SOURCE_TYPES, CONFIDENCE_BASIS, FEED_STATUS, READING_STATUS,
+    ]) {
       for (const [key, entry] of Object.entries(table)) {
         expect(entry.label, key).toBeTruthy();
         expect(entry.plain.length, key).toBeGreaterThan(20);

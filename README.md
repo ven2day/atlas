@@ -367,6 +367,7 @@ causes. Every bar keeps the `source` that served it.
 | --- | --- |
 | 🏗️ **[Architecture](docs/architecture.md)** | How the parts fit: the flow, a trading day, books, risk, AI, the event store |
 | 📘 **Runbooks** | [Daily operations](docs/runbooks/daily-ops.md) · [Kill switches](docs/runbooks/kill-switch.md) · [Incidents](docs/runbooks/incident.md) · [AI providers](docs/runbooks/providers.md) |
+| 📰 **[News & events](docs/news.md)** | Configurable public RSS feeds, honest classification and catalyst watch - research visibility, never an order path |
 | 📖 **Reference** (generated) | [Settings](docs/reference/settings.md) · [Risk limits and reason codes](docs/reference/risk.md) · [Events](docs/reference/events.md) · [HTTP API and stream](docs/reference/api.md) · [Packages](docs/reference/packages.md) · [Scripts](docs/reference/scripts.md) |
 | 🧪 **[Pre-registration](docs/experiments/2026-10-month1-preregistration.md)** | The month run's hypotheses and decision rules, fixed in advance |
 | 🗺️ **[Plan](docs/plan/2026-10-01-platform-v2-plan.md) · [Progress](docs/plan/PROGRESS.md)** | The Platform v2 build: every decision and verified fact |

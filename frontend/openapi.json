@@ -1676,6 +1676,329 @@
         "title": "ModelHealth",
         "type": "object"
       },
+      "NewsFeedRow": {
+        "description": "One registry feed's health. ``status`` never reads a failure as quiet:\n``failing`` (down alert since the last success), ``quiet`` (no items for 48 h, no failure),\n``empty`` (no items yet), ``active``, ``disabled``, ``unverified``, or ``owned``\n(collected by another component, e.g. the announcement ingestor).",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "gaps": {
+            "title": "Gaps",
+            "type": "integer"
+          },
+          "items_total": {
+            "title": "Items Total",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_item_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Item At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owned_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owned By"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "verified": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "type",
+          "enabled",
+          "verified",
+          "owned_by",
+          "status",
+          "last_item_at",
+          "items_total",
+          "gaps",
+          "last_error"
+        ],
+        "title": "NewsFeedRow",
+        "type": "object"
+      },
+      "NewsReadingRow": {
+        "description": "One classification of one news item for one resolved instrument. Fields no rule or model\nreading supports stay 'unknown'/None; ``confidence_basis`` names what the number is (a rule\nprior is not a calibrated probability).",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "classified_at": {
+            "format": "date-time",
+            "title": "Classified At",
+            "type": "string"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "confidence_basis": {
+            "title": "Confidence Basis",
+            "type": "string"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "horizon": {
+            "title": "Horizon",
+            "type": "string"
+          },
+          "impact": {
+            "title": "Impact",
+            "type": "string"
+          },
+          "instrument_key": {
+            "title": "Instrument Key",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "news_id": {
+            "title": "News Id",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "relevant": {
+            "title": "Relevant",
+            "type": "boolean"
+          },
+          "rules_version": {
+            "title": "Rules Version",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "uncertainties": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Uncertainties",
+            "type": "array"
+          }
+        },
+        "required": [
+          "news_id",
+          "instrument_key",
+          "symbol",
+          "category",
+          "direction",
+          "impact",
+          "horizon",
+          "confidence",
+          "confidence_basis",
+          "rationale",
+          "evidence",
+          "uncertainties",
+          "relevant",
+          "model",
+          "rules_version",
+          "classified_at"
+        ],
+        "title": "NewsReadingRow",
+        "type": "object"
+      },
+      "NewsRow": {
+        "description": "One collected news item: headline, short summary, link, both timestamps (published and\nreceived - never conflated), provenance, duplicate linkage and every reading of it.",
+        "properties": {
+          "duplicate_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of"
+          },
+          "news_id": {
+            "title": "News Id",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "readings": {
+            "items": {
+              "$ref": "#/components/schemas/NewsReadingRow"
+            },
+            "title": "Readings",
+            "type": "array"
+          },
+          "received_at": {
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "source_key": {
+            "title": "Source Key",
+            "type": "string"
+          },
+          "source_name": {
+            "title": "Source Name",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/components/schemas/NewsSymbolRow"
+            },
+            "title": "Symbols",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "news_id",
+          "source_key",
+          "source_name",
+          "source_type",
+          "title",
+          "summary",
+          "url",
+          "published_at",
+          "received_at",
+          "duplicate_of",
+          "symbols",
+          "readings"
+        ],
+        "title": "NewsRow",
+        "type": "object"
+      },
+      "NewsSymbolRow": {
+        "description": "One symbol mention in a news item, with the evidence - and whether it is *resolved*.\nAn ambiguous mention stays unresolved: a guessed instrument would price the wrong company.",
+        "properties": {
+          "evidence": {
+            "title": "Evidence",
+            "type": "string"
+          },
+          "instrument_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument Key"
+          },
+          "resolved": {
+            "title": "Resolved",
+            "type": "boolean"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "instrument_key",
+          "evidence",
+          "resolved"
+        ],
+        "title": "NewsSymbolRow",
+        "type": "object"
+      },
       "OrderRow": {
         "properties": {
           "avg_fill_price": {
@@ -6078,6 +6401,251 @@
           }
         },
         "summary": "Bars"
+      }
+    },
+    "/api/news": {
+      "get": {
+        "description": "Collected news items with every reading of them, newest first.\n\nRead-only research visibility: an item nobody could classify is returned *unclassified*\nrather than dropped, and a failing feed is reported by ``/api/news/feeds`` - never as\n\"no news\". Nothing here can place, size or route an order.",
+        "operationId": "news_api_news_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "symbol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Z0-9&_.^-]{1,32}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Symbol"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(results_guidance|contract_order|acquisition|corporate_action|board_meeting|regulatory_legal|credit_rating|promoter_insider|macro_policy|market_wide|rumor|other|unknown)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "direction",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(bullish|bearish|mixed|neutral|unknown)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Direction"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-z0-9_]{1,32}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/NewsRow"
+                  },
+                  "title": "Response News Api News Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing or wrong token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "summary": "News"
+      }
+    },
+    "/api/news/feeds": {
+      "get": {
+        "description": "The registry's feeds with their recorded health: active, quiet, failing, empty,\ndisabled, unverified, or owned by another collector.",
+        "operationId": "news_feeds_api_news_feeds_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/NewsFeedRow"
+                  },
+                  "title": "Response News Feeds Api News Feeds Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Missing or wrong token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid request"
+          }
+        },
+        "summary": "News Feeds"
       }
     },
     "/api/orders": {

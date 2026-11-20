@@ -30,8 +30,17 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from src.domain.events import AnnouncementReceived
-from src.domain.types import AnnouncementType, EventDirection, Instrument, Materiality, TypedEvent
+from src.domain.events import AnnouncementReceived, NewsClassified, NewsItemReceived
+from src.domain.types import (
+    AnnouncementType,
+    EventDirection,
+    Instrument,
+    Materiality,
+    NewsCategory,
+    NewsDirection,
+    NewsImpact,
+    TypedEvent,
+)
 from src.utils.market_time import IST
 
 if TYPE_CHECKING:
@@ -40,6 +49,43 @@ if TYPE_CHECKING:
 # How much to trust the feed itself, before any reading of an individual item. Only sources this
 # repository actually reads are listed; an unlisted source is *unknown*, not silently trusted.
 SOURCE_CONFIDENCE: Mapping[str, float] = {"nse_rss": 0.95}
+# News feeds are secondary reporting, not the exchange's own record: less trust by construction,
+# and an official macro feed slightly more than general media. These are judgment constants, not
+# measurements - deliberately visible here rather than buried.
+NEWS_SOURCE_CONFIDENCE: Mapping[str, float] = {"media_news": 0.6, "macro": 0.7}
+
+# The news taxonomy is wider than the exchange's announcement types; only unambiguous
+# equivalences are mapped, everything else stays None rather than being forced into a wrong type.
+NEWS_CATEGORY_AS_ANNOUNCEMENT: Mapping[NewsCategory, AnnouncementType | None] = {
+    NewsCategory.RESULTS_GUIDANCE: AnnouncementType.RESULTS,
+    NewsCategory.CONTRACT_ORDER: AnnouncementType.ORDER_WIN,
+    NewsCategory.ACQUISITION: None,
+    NewsCategory.CORPORATE_ACTION: None,
+    NewsCategory.BOARD_MEETING: None,
+    NewsCategory.REGULATORY_LEGAL: AnnouncementType.LITIGATION_OR_REGULATORY,
+    NewsCategory.CREDIT_RATING: AnnouncementType.RATING_CHANGE,
+    NewsCategory.PROMOTER_INSIDER: AnnouncementType.INSIDER_OR_PROMOTER,
+    NewsCategory.MACRO_POLICY: None,
+    NewsCategory.MARKET_WIDE: None,
+    NewsCategory.RUMOR: None,
+    NewsCategory.OTHER: AnnouncementType.OTHER,
+    NewsCategory.UNKNOWN: None,
+}
+# MIXED has no EventDirection equivalent; UNCLEAR ("cannot tell one-sided") is the honest
+# mapping, and the news reading keeps its own MIXED value on the NewsClassified event.
+NEWS_DIRECTION_AS_EVENT: Mapping[NewsDirection, EventDirection | None] = {
+    NewsDirection.BULLISH: EventDirection.POSITIVE,
+    NewsDirection.BEARISH: EventDirection.NEGATIVE,
+    NewsDirection.NEUTRAL: EventDirection.NEUTRAL,
+    NewsDirection.MIXED: EventDirection.UNCLEAR,
+    NewsDirection.UNKNOWN: None,
+}
+NEWS_IMPACT_AS_MATERIALITY: Mapping[NewsImpact, Materiality | None] = {
+    NewsImpact.HIGH: Materiality.MAJOR,
+    NewsImpact.MEDIUM: Materiality.MODERATE,
+    NewsImpact.LOW: Materiality.MINOR,
+    NewsImpact.UNKNOWN: None,
+}
 
 # A re-issue that says so outright supersedes the previous event of the same type for the
 # instrument, within this many days.
@@ -259,8 +305,70 @@ def research_events(
                 calibrated=bool(typed.calibrated) if typed is not None else False,
             )
         )
+    out.extend(_news_events(store, lookup=lookup, as_of=as_of))
     out.sort(key=lambda e: (e.known_at, e.event_id))
     return _mark_superseded(out)
+
+
+def _news_events(
+    store: EventStore,
+    *,
+    lookup: Mapping[str, Instrument],
+    as_of: datetime | None,
+) -> list[ResearchEvent]:
+    """Classified news items as research events, with the same look-ahead guard.
+
+    Only readings attached to a *resolved* instrument become research events (an unresolved
+    mention has nothing to price); the items themselves stay in the archive and the News screen
+    either way. ``known_at`` includes the classification time, so a reading that arrived late
+    can never leak into an earlier evaluation.
+    """
+    items: dict[str, NewsItemReceived] = {}
+    for event in store.read(types=["NewsItemReceived"]):
+        payload = event.payload
+        if isinstance(payload, NewsItemReceived):
+            if as_of is not None and event.ts_utc > as_of:
+                continue
+            items[payload.news_id] = payload
+    out: list[ResearchEvent] = []
+    for event in store.read(types=["NewsClassified"]):
+        payload = event.payload
+        if not isinstance(payload, NewsClassified):
+            continue
+        item = items.get(payload.news_id)
+        if item is None:
+            continue  # a reading without its item cannot be audited; skip rather than invent
+        known = max(item.published_at, item.received_at, payload.classified_at)
+        if as_of is not None and known > as_of:
+            continue  # not knowable yet: the point-in-time guard
+        instrument = lookup.get(payload.instrument_key)
+        out.append(
+            ResearchEvent(
+                event_id=f"{payload.news_id}|{payload.symbol}",
+                instrument_key=payload.instrument_key,
+                symbol=payload.symbol,
+                company="",
+                sector=(instrument.sector or None) if instrument is not None else None,
+                asset=_asset_of(instrument),
+                source=f"news:{item.source_key}",
+                source_url=item.url,
+                published_at=item.published_at,
+                ingested_at=item.received_at,
+                event_time=None,
+                known_at=known,
+                event_type=NEWS_CATEGORY_AS_ANNOUNCEMENT.get(payload.category),
+                subject=payload.category.value.replace("_", " "),
+                text=" — ".join(part for part in (item.title, item.summary) if part),
+                relevant=payload.relevant,
+                direction=NEWS_DIRECTION_AS_EVENT.get(payload.direction),
+                materiality=NEWS_IMPACT_AS_MATERIALITY.get(payload.impact),
+                source_confidence=NEWS_SOURCE_CONFIDENCE.get(item.source_type),
+                classification_confidence=payload.confidence,
+                classification_basis=f"news_{payload.confidence_basis}",
+                calibrated=payload.confidence_basis == "model_calibrated",
+            )
+        )
+    return out
 
 
 def _mark_superseded(events: Iterable[ResearchEvent]) -> list[ResearchEvent]:

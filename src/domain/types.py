@@ -310,6 +310,53 @@ class Materiality(StrEnum):
     MAJOR = "major"
 
 
+class NewsCategory(StrEnum):
+    """What kind of story a news item is. ``UNKNOWN`` is a first-class answer: a category is
+    never guessed from a headline the rules cannot place and the model would not commit to."""
+
+    RESULTS_GUIDANCE = "results_guidance"
+    CONTRACT_ORDER = "contract_order"
+    ACQUISITION = "acquisition"
+    CORPORATE_ACTION = "corporate_action"  # dividend / bonus / split / buyback
+    BOARD_MEETING = "board_meeting"
+    REGULATORY_LEGAL = "regulatory_legal"
+    CREDIT_RATING = "credit_rating"
+    PROMOTER_INSIDER = "promoter_insider"
+    MACRO_POLICY = "macro_policy"
+    MARKET_WIDE = "market_wide"
+    RUMOR = "rumor"
+    OTHER = "other"
+    UNKNOWN = "unknown"
+
+
+class NewsDirection(StrEnum):
+    """The expected price direction a reading supports. ``UNKNOWN`` means no rule or model
+    reading backs a call; ``MIXED`` means the same story carries opposite effects."""
+
+    BULLISH = "bullish"
+    BEARISH = "bearish"
+    MIXED = "mixed"
+    NEUTRAL = "neutral"
+    UNKNOWN = "unknown"
+
+
+class NewsImpact(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    UNKNOWN = "unknown"
+
+
+class NewsHorizon(StrEnum):
+    """The horizon the reading claims - a label, not a promise; outcomes are measured by the
+    research layer before any horizon is trusted."""
+
+    INTRADAY = "intraday"
+    SESSIONS_1_3 = "sessions_1_3"
+    SWING = "swing"
+    UNKNOWN = "unknown"
+
+
 # ---------------------------------------------------------------------------
 # Reference and market data
 # ---------------------------------------------------------------------------

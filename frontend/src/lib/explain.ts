@@ -191,6 +191,86 @@ export const STRATEGIES: Record<string, Explain> = {
   trend_following: explain("Trend following (shadow)", "Rides established trends using ADX and the directional indicators. Shadow: recorded for study, never traded."),
 };
 
+// -- news & events --------------------------------------------------------------------------------
+// The news taxonomy from src/domain/types.py (NewsCategory/NewsDirection/NewsImpact/NewsHorizon),
+// the feed-health states from GET /api/news/feeds, and what a confidence number is based on.
+
+/** News event categories (NewsCategory). */
+export const NEWS_CATEGORIES: Record<string, Explain> = {
+  results_guidance: explain("Results / guidance", "Earnings, quarterly or annual results, guidance, or a profit warning."),
+  contract_order: explain("Order win", "A contract, order or project win."),
+  acquisition: explain("Acquisition / M&A", "An acquisition, merger or takeover - carries both opportunity and integration risk, so rules read it as mixed, never one-sided."),
+  corporate_action: explain("Corporate action", "A dividend, bonus, split or buyback."),
+  board_meeting: explain("Board meeting", "A board meeting is scheduled or concluded; its outcome is unknown until announced."),
+  regulatory_legal: explain("Regulatory / legal", "Regulatory action, investigation, penalty or lawsuit."),
+  credit_rating: explain("Credit rating", "A credit-rating action (upgrade, downgrade, affirmation)."),
+  promoter_insider: explain("Promoter / insider", "Promoter or insider activity: stake changes, pledges, SAST disclosures."),
+  macro_policy: explain("Macro / policy", "Macro-economic or policy news (RBI, inflation, budget) - not attributable to one company by rules alone."),
+  market_wide: explain("Market-wide", "Market-wide coverage carrying no single-stock conclusion."),
+  rumor: explain("Rumor", "Unconfirmed reporting. No direction is ever assigned to a rumor; it stays a watch item."),
+  other: explain("Other", "Classified as other news."),
+  unknown: explain("Unknown", "No rule or model reading supports a category - the item needs review."),
+};
+
+/** Expected-direction readings (NewsDirection). */
+export const NEWS_DIRECTIONS: Record<string, Explain> = {
+  bullish: explain("Bullish", "The reading expects this to support the share price."),
+  bearish: explain("Bearish", "The reading expects this to weigh on the share price."),
+  mixed: explain("Mixed", "The story carries both positive and negative effects; no one-sided call is made."),
+  neutral: explain("Neutral", "No material price effect expected."),
+  unknown: explain("Unknown", "No rule or model reading supports a direction - none is invented."),
+};
+
+/** Expected-impact readings (NewsImpact). */
+export const NEWS_IMPACTS: Record<string, Explain> = {
+  low: explain("Low impact", "Expected to matter little for the share price."),
+  medium: explain("Medium impact", "Expected to matter moderately."),
+  high: explain("High impact", "Expected to matter significantly."),
+  unknown: explain("Unknown impact", "The reading does not claim an impact size - headline wording rarely proves magnitude."),
+};
+
+/** Claimed time horizons (NewsHorizon) - a label to be measured, not a promise. */
+export const NEWS_HORIZONS: Record<string, Explain> = {
+  intraday: explain("Intraday", "Effect expected within the session."),
+  sessions_1_3: explain("1-3 sessions", "Effect expected over one to three sessions."),
+  swing: explain("Swing", "Effect expected over more than three sessions."),
+  unknown: explain("Unknown horizon", "The reading does not claim a horizon."),
+};
+
+/** Feed source types (the registry's `type`). */
+export const NEWS_SOURCE_TYPES: Record<string, Explain> = {
+  media_news: explain("Media", "Financial news media - secondary reporting, less trust than the exchange's own record."),
+  macro: explain("Macro", "Official / institutional macro source."),
+  exchange_filing: explain("Exchange filing", "Exchange-published filing - the primary source."),
+};
+
+/** What a confidence number is based on (NewsClassified.confidence_basis). */
+export const CONFIDENCE_BASIS: Record<string, Explain> = {
+  rule: explain("Rule prior", "A deterministic keyword-rule reading carries a fixed prior (0.35) - a label of 'the rules recognized this', NOT a calibrated probability."),
+  model: explain("Model (uncalibrated)", "A model answer whose confidence has not been calibrated for this task."),
+  model_calibrated: explain("Model (calibrated)", "A model answer with task calibration applied."),
+  none: explain("No reading", "Neither a rule nor a model could read this item - it stays unclear."),
+};
+
+/** Feed-health states from GET /api/news/feeds. A failing feed is never shown as a quiet one. */
+export const FEED_STATUS: Record<string, Explain> = {
+  active: explain("Active", "Fetching on schedule and recently delivered items."),
+  quiet: explain("Quiet", "Working, but no items for 48+ hours - possibly a slow news period, possibly early failure; the last success time tells you which."),
+  failing: explain("Failing", "The last fetch failed. Coverage since the last success is UNKNOWN - not 'no news'."),
+  empty: explain("No items yet", "Enabled and verified, but nothing collected yet - the first poll has not returned an item."),
+  disabled: explain("Disabled", "Turned off in the registry; nothing is fetched."),
+  unverified: explain("Unverified", "Enabled but never passed verification - deliberately NOT fetched. Run scripts/verify_news_feeds.py, then set verified in the registry."),
+  owned: explain("Owned elsewhere", "Collected by another component (the announcement ingestor); the news collector never double-fetches it."),
+  invalid: explain("Registry invalid", "The feed registry could not be read; the error is shown with the row."),
+};
+
+/** The status chip of one reading: what the system decided to do about it. */
+export const READING_STATUS: Record<string, Explain> = {
+  catalyst_watch: explain("Catalyst watch", "A possible price catalyst: visible for research and monitoring. This is NOT an order - traded signals appear under Decisions after AI review and risk checks."),
+  unclear: explain("Unclear - needs review", "No rule or model reading supports a conclusion. Nothing is guessed; a human should look at the original item."),
+  not_relevant: explain("Not relevant", "The reading judged this routine or not company-specific; it stays in the archive."),
+};
+
 // -- market data freshness -------------------------------------------------------------------------
 
 export type Freshness = "live" | "delayed" | "stale" | "none";

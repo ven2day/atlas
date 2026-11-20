@@ -45,6 +45,10 @@
 | `LLM_ANTHROPIC_FALLBACKS` | bool | True | Anthropic server-side refusal fallbacks (where supported) |
 | `ANNOUNCEMENTS_ENABLED` | bool | True | Poll NSE's announcements RSS feed during the session |
 | `ANNOUNCEMENTS_URL` | str | 'https://nsearchives.nseindia.com/content/RSS/Online_announcements.xml' | The RSS feed (polled no faster than its <ttl>) |
+| `NEWS_ENABLED` | bool | True | Poll the enabled, verified news feeds of the registry during the session (a registry with none enabled is a no-op) |
+| `NEWS_FEEDS_FILE` | Path \| None | unset | Feed registry (default src/config/news_feeds.yaml); only enabled+verified feeds are fetched |
+| `NEWS_MAX_RESPONSE_BYTES` | int | 2000000 | Hard cap on one feed response body |
+| `NEWS_FETCH_TIMEOUT_S` | float | 15.0 | Per-feed fetch timeout (connect+read) |
 | `DECISION_LAYA_ENABLED` | bool | True | Use local Laya when the decision-local extra is installed |
 | `DECISION_LAYA_CHECKPOINT` | 'english' \| 'multilingual' \| 'typed-decisions' | 'multilingual' | Fastest on CPU (docs/plan/decision-model-benchmark.md) |
 | `TYPESAFE_API_KEY` | secret \| None | unset | Jev (TypeSafe) key |

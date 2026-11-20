@@ -12,6 +12,7 @@ const SCREENS = [
   ["/risk", "5-risk-center", "Limits in use"],
   ["/ai", "6-ai-desk", "Roles and models"],
   ["/experiment", "7-experiment", "Daily reports"],
+  ["/news", "10-news", "News & events"],
   ["/market?symbol=TCS", "8-market", "Announcements"],
   ["/system", "9-system", "Reconciliation (OMS vs broker)"],
 ] as const;

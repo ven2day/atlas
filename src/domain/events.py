@@ -42,6 +42,10 @@ from src.domain.types import (
     KillScope,
     KillSwitchState,
     MarketDataSource,
+    NewsCategory,
+    NewsDirection,
+    NewsHorizon,
+    NewsImpact,
     Order,
     OrderIntent,
     OrderStatus,
@@ -242,6 +246,72 @@ class AnnouncementCoverageGap(EventPayload):
     event_type = "AnnouncementCoverageGap"
     source: NonEmptyStr
     gap_from: AwareDatetime
+    gap_to: AwareDatetime
+    reason: NonEmptyStr
+
+
+class NewsSymbolMatch(DomainModel):
+    """One symbol a news item mentions, with the evidence - and whether the match is *resolved*.
+    An ambiguous mention stays unresolved: a guessed instrument would price the wrong company."""
+
+    symbol: NonEmptyStr
+    instrument_key: str | None = None
+    evidence: NonEmptyStr  # what matched where, e.g. "company name 'infosys' in the title"
+    resolved: bool = True
+
+
+class NewsItemReceived(EventPayload):
+    """One item from a configured public news RSS feed, point in time: the publisher's
+    ``published_at`` and our ``received_at`` are separate facts and are never conflated or
+    backdated. Headline, short summary and the link are kept - never the full article."""
+
+    event_type = "NewsItemReceived"
+    news_id: NonEmptyStr  # sha of (source_key, guid-or-url, published_at): stable across polls
+    source_key: NonEmptyStr  # the registry key, e.g. "moneycontrol_news"
+    source_name: NonEmptyStr  # the publisher's own name
+    source_type: NonEmptyStr  # "media_news" | "macro" | "exchange_filing"
+    title: NonEmptyStr
+    summary: str = ""  # short (<= 600 chars), as published
+    url: str | None = None
+    published_at: AwareDatetime
+    received_at: AwareDatetime
+    symbols: tuple[NewsSymbolMatch, ...] = ()
+    content_hash: NonEmptyStr  # normalised-title hash: links the same story across feeds
+    duplicate_of: str | None = None  # news_id first seen with this content_hash (provenance kept)
+
+
+class NewsClassified(EventPayload):
+    """One reading of one news item for one resolved instrument. Fields the rules or the model
+    cannot support stay ``unknown``/``None`` - an unclear item is labelled unclear, never given
+    an invented direction, impact or certainty. ``confidence_basis`` says what the number is:
+    a rule prior or a model answer is not a calibrated probability."""
+
+    event_type = "NewsClassified"
+    news_id: NonEmptyStr
+    instrument_key: NonEmptyStr
+    symbol: NonEmptyStr
+    category: NewsCategory
+    direction: NewsDirection = NewsDirection.UNKNOWN
+    impact: NewsImpact = NewsImpact.UNKNOWN
+    horizon: NewsHorizon = NewsHorizon.UNKNOWN
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    confidence_basis: NonEmptyStr  # "rule" | "model" | "model_calibrated" | "none"
+    rationale: NonEmptyStr  # plain language, grounded only in the item's own text
+    evidence: tuple[str, ...] = ()
+    uncertainties: tuple[str, ...] = ()
+    relevant: bool = False  # a possible catalyst (True) vs routine/unclear (False)
+    model: NonEmptyStr  # "rule_table", "laya+rules", ... - what produced this reading
+    rules_version: NonEmptyStr
+    classified_at: AwareDatetime
+
+
+class NewsCoverageGap(EventPayload):
+    """A news feed's polling window that may hold items this system never saw (fetch failure or
+    a window that moved past the last success). Unknown coverage is never "no news"."""
+
+    event_type = "NewsCoverageGap"
+    source_key: NonEmptyStr
+    gap_from: AwareDatetime | None = None  # None: the feed has never succeeded
     gap_to: AwareDatetime
     reason: NonEmptyStr
 
@@ -712,6 +782,10 @@ _PAYLOADS: tuple[type[EventPayload], ...] = (
     # announcements
     AnnouncementReceived,
     AnnouncementCoverageGap,
+    # news
+    NewsItemReceived,
+    NewsClassified,
+    NewsCoverageGap,
     # decision
     RegimeComputed,
     SignalGenerated,

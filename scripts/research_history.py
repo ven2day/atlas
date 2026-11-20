@@ -53,7 +53,13 @@ sys.stdout.reconfigure(encoding="utf-8")
 from src.config import get_settings
 from src.config.settings import Settings
 from src.domain.calendar import get_calendar
-from src.domain.events import AnnouncementCoverageGap, AnnouncementReceived
+from src.domain.events import (
+    AnnouncementCoverageGap,
+    AnnouncementReceived,
+    NewsClassified,
+    NewsCoverageGap,
+    NewsItemReceived,
+)
 from src.domain.types import Instrument
 from src.engine.market import INDEX_KEY, INDEX_TICKER, build_history_source
 from src.marketdata.history import DailySeries
@@ -63,6 +69,7 @@ from src.reference.instruments import fetch_master
 from src.reference.refresh import refresh_reference
 from src.research import historical
 from src.research.evaluation import CalibrationCell
+from src.research.events import NEWS_CATEGORY_AS_ANNOUNCEMENT
 from src.research.forecast import technical_state_by_date
 from src.research.historical import (
     DEFAULT_LOOKBACK_DAYS,
@@ -83,7 +90,12 @@ from src.research.outcomes import (
     summarize_outcomes,
 )
 from src.research.provenance import EvaluationMode
-from src.research.rss_sync import EventStoreRssSource, actual_mode_records, gaps_from_events
+from src.research.rss_sync import (
+    EventStoreRssSource,
+    actual_mode_records,
+    gaps_from_events,
+    news_gaps_from_events,
+)
 from src.research.store import ResearchStore
 from src.research.walkforward import WalkForwardConfig
 from src.store.event_store import EventStore
@@ -339,45 +351,68 @@ def _cmd_coverage(args: argparse.Namespace, store: ResearchStore) -> int:
 
 
 async def _cmd_sync_rss(args: argparse.Namespace, store: ResearchStore) -> int:
-    """Make the live RSS collection available to research, repeatably and without backdating."""
+    """Make the live RSS collection available to research, repeatably and without backdating.
+
+    Syncs both forward-captured collections: the NSE announcement ingestor's records (source
+    ``nse_rss``) and the news collector's items (source ``news:<feed>``), each with its real
+    receipt time, plus both collectors' coverage gaps."""
     settings = get_settings()
     with EventStore(settings.db_path) as event_store:
-        events = event_store.read(types=["AnnouncementReceived", "AnnouncementCoverageGap"])
+        events = event_store.read(types=[
+            "AnnouncementReceived", "AnnouncementCoverageGap",
+            "NewsItemReceived", "NewsCoverageGap", "NewsClassified",
+        ])  # fmt: skip
     announcements = [
         (e.payload, e.seq) for e in events if isinstance(e.payload, AnnouncementReceived)
     ]
     gaps = [e.payload for e in events if isinstance(e.payload, AnnouncementCoverageGap)]
-    if not announcements:
+    news = [(e.payload, e.seq) for e in events if isinstance(e.payload, NewsItemReceived)]
+    news_gaps = [e.payload for e in events if isinstance(e.payload, NewsCoverageGap)]
+    # Enrich synced news rows with the mapped announcement type of their reading, so downstream
+    # cohorts can group them; a reading the taxonomy cannot map stays untyped rather than forced.
+    news_event_types: dict[tuple[str, str], str] = {}
+    for e in events:
+        if isinstance(e.payload, NewsClassified):
+            mapped = NEWS_CATEGORY_AS_ANNOUNCEMENT.get(e.payload.category)
+            if mapped is not None:
+                news_event_types[(e.payload.news_id, e.payload.symbol)] = mapped.value
+    if not announcements and not news:
         print(
-            "no stored RSS announcements: run a session with ANNOUNCEMENTS_ENABLED=true first "
-            "(the collector polls NSE's official RSS feed during the session and pre-open)"
+            "no stored RSS announcements or news items: run a session with "
+            "ANNOUNCEMENTS_ENABLED=true (and enabled+verified news feeds) first"
         )
         return ExitCode.OK
-    range_from = args.range_from or min(a.published_at.date() for a, _ in announcements)
+    published_days = [a.published_at.date() for a, _ in announcements] + [
+        item.published_at.date() for item, _ in news
+    ]
+    range_from = args.range_from or min(published_days)
     range_to = args.range_to or now_ist().date()
-    source = EventStoreRssSource(announcements)
+    source = EventStoreRssSource(announcements, news=news, news_event_types=news_event_types)
+    all_gap_rows = [g.as_row() for g in gaps_from_events(gaps)]
+    all_gap_rows += [g.as_row() for g in news_gaps_from_events(news_gaps)]
     if args.dry_run:
         page = await source.fetch(
             range_from=range_from, range_to=range_to, symbols=args.symbol,
             cursor=None, limit=100000,
         )  # fmt: skip
         print(f"[dry-run] the event store would sync {len(page.records)} record(s) "
-              f"({range_from}..{range_to}) and {len(gaps)} coverage gap(s)")  # fmt: skip
+              f"({range_from}..{range_to}) and {len(all_gap_rows)} coverage gap(s)")  # fmt: skip
         return ExitCode.OK
     report = await historical.import_history(
         store, source, range_from=range_from, range_to=range_to, symbols=args.symbol
     )
-    synced_gaps = store.save_coverage_gaps([g.as_row() for g in gaps_from_events(gaps)])
+    synced_gaps = store.save_coverage_gaps(all_gap_rows)
     print(f"sync-rss {report.import_id} -> {report.status}")
     print(f"  fetched={report.fetched} inserted={report.inserted} "
           f"duplicates={report.duplicates} rejected={report.rejected}")  # fmt: skip
-    print(f"  coverage gaps synced: {synced_gaps} statement(s), {len(gaps)} known gap(s)")
+    print(f"  coverage gaps synced: {synced_gaps} statement(s), {len(all_gap_rows)} known gap(s)")
     summary = historical.coverage_summary(store)
-    print("\nnse_rss archive (prospective collection, not a historical backfill):")
-    print(f"  published from : {summary['oldest_published'].get('nse_rss', '-')}")
-    print(f"  published to   : {summary['newest_published'].get('nse_rss', '-')}")
-    print(f"  last received  : {summary['last_received'].get('nse_rss', '-')}")
-    print(f"  records        : {summary['by_source'].get('nse_rss', 0)}")
+    print("\narchive by source (prospective collection, not a historical backfill):")
+    for name in sorted(summary["by_source"]):
+        print(f"  {name:<28} records={summary['by_source'][name]:<5} "
+              f"published {summary['oldest_published'].get(name, '-')[:10]}.."
+              f"{summary['newest_published'].get(name, '-')[:10]} "
+              f"last received {summary['last_received'].get(name, '-')}")  # fmt: skip
     print(f"  capture kinds  : {summary['by_capture_kind']}")
     if summary["coverage_gaps"]:
         print(f"  unknown windows: {len(summary['coverage_gaps'])} coverage gap(s) - treat as "

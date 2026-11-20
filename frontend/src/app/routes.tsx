@@ -9,6 +9,7 @@ const RiskCenter = lazy(() => import("../screens/RiskCenter"));
 const AIDesk = lazy(() => import("../screens/AIDesk"));
 const Experiment = lazy(() => import("../screens/Experiment"));
 const Research = lazy(() => import("../screens/Research"));
+const News = lazy(() => import("../screens/News"));
 const Market = lazy(() => import("../screens/Market"));
 const System = lazy(() => import("../screens/System"));
 
@@ -100,6 +101,16 @@ export const SCREENS: Screen[] = [
     blurb:
       "Event-aware candidates with probabilistic forecasts, the evidence and conditions behind each, and how well past forecasts calibrated. Decision support only: it never places an order.",
     element: <Research />,
+  },
+  {
+    path: "/news",
+    icon: "layers",
+    label: "News",
+    key: "0",
+    group: "Research",
+    blurb:
+      "Collected news feeds and what the system read from each item: catalysts, directions with evidence, and feed health. Research visibility only - a catalyst watch is never an order.",
+    element: <News />,
   },
   {
     path: "/market",

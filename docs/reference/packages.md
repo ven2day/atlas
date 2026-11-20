@@ -113,6 +113,7 @@ graph LR
   web --> engine
   web --> evaluation
   web --> llm
+  web --> marketdata
   web --> oms
   web --> ops
   web --> research
@@ -196,6 +197,7 @@ Imports: `domain`, `llm`, `marketdata`, `utils`.
 | `decision_models/labels.py` | The labelled announcement set for decision-model calibration (plan M7.5). |
 | `decision_models/setup.py` | Building the decision-model cascade from the settings (plan M7): Laya when the optional ``decision-local`` extra is installed and enabled, Jev when ``TYPESAFE_API_KEY`` is set. With neither, there is no cascade and callers degrade (announcements are stored, not classified). |
 | `decision_models/tasks/announcements.py` | The announcement classifier (plan M7.7): every new ``AnnouncementReceived`` becomes a ``TypedEvent`` (projected into ``typed_events``) for the event gate (M7.8) and Book B (M7.9). |
+| `decision_models/tasks/news.py` | Interpreting news items for trading research (categories, direction, impact, horizon). |
 
 ## `src/domain`
 
@@ -299,6 +301,7 @@ Imports: `config`, `domain`, `ops`, `store`, `utils`.
 | `marketdata/dhan/timestamps.py` | Turning Dhan's timestamps into honest IST instants. |
 | `marketdata/dhan/totp.py` | RFC 6238 TOTP codes (HMAC-SHA1, 30 s step, 6 digits), which is what Dhan's token endpoint expects in its ``totp`` query parameter. |
 | `marketdata/history.py` | Daily history (plan M2.3): one batched ``yf.download(period="1y", interval="1d", auto_adjust=False, actions=True)`` per day, pre-open. |
+| `marketdata/news.py` | Configurable public news RSS collection (event-driven research). |
 | `marketdata/replay.py` | Replaying a recorded tape (plan M5.6 acceptance; audit §G.4): the same engine, driven by a :class:`~src.domain.clock.ReplayClock` over what the system received on a past day. |
 | `marketdata/symbols.py` | Mapping between NSE instruments and Yahoo Finance tickers. |
 | `marketdata/validation.py` | Quote validation (plan M2.2; audit §K.4). A quote is dropped, with a ``QuoteRejected`` event, when: |
@@ -452,7 +455,7 @@ Imports: `domain`.
 
 Web console for RakshaQuant - the browser front end (``--mode web``).
 
-Imports: `config`, `decision_models`, `domain`, `engine`, `evaluation`, `llm`, `oms`, `ops`, `research`, `risk`, `store`, `utils`.
+Imports: `config`, `decision_models`, `domain`, `engine`, `evaluation`, `llm`, `marketdata`, `oms`, `ops`, `research`, `risk`, `store`, `utils`.
 
 | Module | Purpose |
 | --- | --- |

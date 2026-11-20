@@ -30,10 +30,19 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
-from src.domain.events import AnnouncementCoverageGap, AnnouncementReceived, symbol_of
+from src.domain.events import (
+    AnnouncementCoverageGap,
+    AnnouncementReceived,
+    NewsCoverageGap,
+    NewsItemReceived,
+    symbol_of,
+)
 from src.research.importing import SourcePage, SourceRecord
 
 RSS_SOURCE = "nse_rss"
+# A NewsCoverageGap whose feed never succeeded has no known start; the archive stores this
+# literal rather than inventing a timestamp.
+UNKNOWN_GAP_START = "unknown"
 
 
 def record_from_announcement(
@@ -72,7 +81,7 @@ def record_from_announcement(
 @dataclass(frozen=True, slots=True)
 class CoverageGapRow:
     source: str
-    gap_from: datetime
+    gap_from: datetime | str  # str only for UNKNOWN_GAP_START (a feed that never succeeded)
     gap_to: datetime
     reason: str
 
@@ -85,18 +94,84 @@ class CoverageGapRow:
         }
 
 
+def records_from_news(
+    item: NewsItemReceived, *, seq: int | None = None, event_type: str | None = None
+) -> list[SourceRecord]:
+    """One research record per **resolved** symbol match of a stored news item.
+
+    An unresolved (ambiguous) mention is deliberately not synced: research rows need an
+    instrument, and guessing one would price the wrong company. The item itself stays in the
+    event store and the News screen either way. ``source_id`` combines the stable ``news_id``
+    with the symbol, so re-syncing deduplicates and a story matched to two symbols keeps two
+    auditable rows. ``received_at`` is the collector's real observation - never backdated.
+    """
+    out: list[SourceRecord] = []
+    for match in item.symbols:
+        if not match.resolved or not match.symbol:
+            continue
+        raw: dict[str, Any] = {
+            "title": item.title,
+            "summary": item.summary,
+            "url": item.url,
+            "news_id": item.news_id,
+            "source_key": item.source_key,
+            "source_name": item.source_name,
+            "source_type": item.source_type,
+            "content_hash": item.content_hash,
+            "duplicate_of": item.duplicate_of,
+            "symbol_evidence": match.evidence,
+            "instrument_key": match.instrument_key,
+        }
+        if event_type:
+            raw["event_type"] = event_type
+        if seq is not None:
+            raw["event_seq"] = seq
+        out.append(
+            SourceRecord(
+                source=f"news:{item.source_key}",
+                symbol=match.symbol.upper(),
+                published_at=item.published_at,
+                raw=raw,
+                source_id=f"{item.news_id}:{match.symbol.upper()}",
+                event_type=event_type,
+                document_url=item.url,
+                received_at=item.received_at,
+                capture_kind="forward_captured",
+            )
+        )
+    return out
+
+
 class EventStoreRssSource:
-    """A historical source over announcements the live RSS collector already stored.
+    """A historical source over what the live collectors already stored.
 
     It answers from the event store's own rows, so ``answered`` is always true once constructed:
     this source cannot have a transport failure, and it never invents records for a window -
-    a window with no stored announcements genuinely has none *in the collection*.
+    a window with no stored items genuinely has none *in the collection*. News items ride the
+    same sync (record-level ``source`` tells them apart: ``nse_rss`` vs ``news:<key>``).
     """
 
-    def __init__(self, announcements: Iterable[tuple[AnnouncementReceived, int | None]]) -> None:
-        self._records = tuple(
-            record_from_announcement(payload, seq=seq) for payload, seq in announcements
-        )
+    def __init__(
+        self,
+        announcements: Iterable[tuple[AnnouncementReceived, int | None]],
+        news: Iterable[tuple[NewsItemReceived, int | None]] = (),
+        news_event_types: Mapping[tuple[str, str], str] | None = None,
+    ) -> None:
+        records = [record_from_announcement(payload, seq=seq) for payload, seq in announcements]
+        types = news_event_types or {}
+        for item, seq in news:
+            for record in records_from_news(item, seq=seq):
+                event_type = types.get((item.news_id, record.symbol))
+                if event_type is not None:
+                    record = SourceRecord(
+                        source=record.source, symbol=record.symbol,
+                        published_at=record.published_at, raw=record.raw,
+                        source_id=record.source_id, event_type=event_type,
+                        document_url=record.document_url, received_at=record.received_at,
+                        capture_kind=record.capture_kind,
+                    )  # fmt: skip
+                records.append(record)
+        self._records = tuple(records)
 
     @property
     def name(self) -> str:
@@ -139,6 +214,20 @@ def gaps_from_events(gaps: Iterable[AnnouncementCoverageGap]) -> list[CoverageGa
         CoverageGapRow(
             source=gap.source, gap_from=gap.gap_from, gap_to=gap.gap_to, reason=gap.reason
         )  # fmt: skip
+        for gap in gaps
+    ]
+
+
+def news_gaps_from_events(gaps: Iterable[NewsCoverageGap]) -> list[CoverageGapRow]:
+    """News-feed coverage gaps, keyed ``news:<feed>``. A feed that never succeeded has no known
+    window start; that is stored as ``UNKNOWN_GAP_START`` rather than an invented timestamp."""
+    return [
+        CoverageGapRow(
+            source=f"news:{gap.source_key}",
+            gap_from=gap.gap_from if gap.gap_from is not None else UNKNOWN_GAP_START,
+            gap_to=gap.gap_to,
+            reason=gap.reason,
+        )
         for gap in gaps
     ]
 
