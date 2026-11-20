@@ -228,6 +228,26 @@ class Settings(BaseSettings):
     )
 
     # ===========================================
+    # News RSS feeds (event-driven research)
+    # ===========================================
+    news_enabled: bool = Field(
+        default=True,
+        description="Poll the enabled, verified news feeds of the registry during the session "
+        "(a registry with none enabled is a no-op)",
+    )
+    news_feeds_file: Path | None = Field(
+        default=None,
+        description="Feed registry (default src/config/news_feeds.yaml); only enabled+verified "
+        "feeds are fetched",
+    )
+    news_max_response_bytes: int = Field(
+        default=2_000_000, gt=0, description="Hard cap on one feed response body"
+    )
+    news_fetch_timeout_s: float = Field(
+        default=15.0, gt=0, description="Per-feed fetch timeout (connect+read)"
+    )
+
+    # ===========================================
     # Typed decision models (plan M7): Laya (local) -> Jev (TypeSafe)
     # ===========================================
     decision_laya_enabled: bool = Field(

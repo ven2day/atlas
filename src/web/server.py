@@ -63,6 +63,8 @@ from src.web.models import (
     Lineage,
     LLMCallRow,
     LogLine,
+    NewsFeedRow,
+    NewsRow,
     OrderRow,
     PositionRow,
     ReportSummary,
@@ -132,6 +134,16 @@ ResearchAsset = Annotated[str | None, Query(pattern=r"^(equity|index|sector|unsu
 EventType = Annotated[str | None, Query(pattern=r"^[a-z_]{1,32}$")]
 Sector = Annotated[str | None, Query(max_length=80)]
 Confidence = Annotated[float | None, Query(ge=0, le=1)]
+# News filters use closed vocabularies (the domain enums), so a typo is a 422 rather than an
+# empty list that silently looks like "no news matched".
+NewsCategory = Annotated[
+    str | None,
+    Query(pattern=r"^(results_guidance|contract_order|acquisition|corporate_action|"
+                  r"board_meeting|regulatory_legal|credit_rating|promoter_insider|"
+                  r"macro_policy|market_wide|rumor|other|unknown)$"),
+]  # fmt: skip
+NewsDirection = Annotated[str | None, Query(pattern=r"^(bullish|bearish|mixed|neutral|unknown)$")]
+FeedKey = Annotated[str | None, Query(pattern=r"^[a-z0-9_]{1,32}$")]
 SYMBOL_PATH = r"^[A-Z0-9&_.^-]{1,32}$"
 DECISION_ID = r"^[A-Za-z0-9_-]{1,64}$"
 
@@ -394,6 +406,30 @@ def create_app(
         symbol: Symbol = None, day: Day = None, limit: Limit = 200
     ) -> list[TypedEventRow]:
         return await read(lambda q: q.typed_events(symbol=symbol, day=day, limit=limit))
+
+    @api.get("/news")
+    async def news(
+        symbol: Symbol = None,
+        category: NewsCategory = None,
+        direction: NewsDirection = None,
+        source: FeedKey = None,
+        day: Day = None,
+        limit: Limit = 200,
+    ) -> list[NewsRow]:
+        """Collected news items with every reading of them, newest first.
+
+        Read-only research visibility: an item nobody could classify is returned *unclassified*
+        rather than dropped, and a failing feed is reported by ``/api/news/feeds`` - never as
+        "no news". Nothing here can place, size or route an order."""
+        return await read(lambda q: q.news(symbol=symbol, category=category,
+                                           direction=direction, source=source, day=day,
+                                           limit=limit))  # fmt: skip
+
+    @api.get("/news/feeds")
+    async def news_feeds() -> list[NewsFeedRow]:
+        """The registry's feeds with their recorded health: active, quiet, failing, empty,
+        disabled, unverified, or owned by another collector."""
+        return await read(lambda q: q.news_feeds())
 
     @api.get("/research/candidates")
     async def research_candidates(

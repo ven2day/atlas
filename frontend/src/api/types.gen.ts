@@ -310,6 +310,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/news": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * News
+         * @description Collected news items with every reading of them, newest first.
+         *
+         *     Read-only research visibility: an item nobody could classify is returned *unclassified*
+         *     rather than dropped, and a failing feed is reported by ``/api/news/feeds`` - never as
+         *     "no news". Nothing here can place, size or route an order.
+         */
+        get: operations["news_api_news_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/news/feeds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * News Feeds
+         * @description The registry's feeds with their recorded health: active, quiet, failing, empty,
+         *     disabled, unverified, or owned by another collector.
+         */
+        get: operations["news_feeds_api_news_feeds_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/orders": {
         parameters: {
             query?: never;
@@ -1202,6 +1247,132 @@ export interface components {
             p50_latency_ms: number | null;
             /** P95 Latency Ms */
             p95_latency_ms: number | null;
+        };
+        /**
+         * NewsFeedRow
+         * @description One registry feed's health. ``status`` never reads a failure as quiet:
+         *     ``failing`` (down alert since the last success), ``quiet`` (no items for 48 h, no failure),
+         *     ``empty`` (no items yet), ``active``, ``disabled``, ``unverified``, or ``owned``
+         *     (collected by another component, e.g. the announcement ingestor).
+         */
+        NewsFeedRow: {
+            /** Enabled */
+            enabled: boolean;
+            /** Gaps */
+            gaps: number;
+            /** Items Total */
+            items_total: number;
+            /** Key */
+            key: string;
+            /** Last Error */
+            last_error: string | null;
+            /** Last Item At */
+            last_item_at: string | null;
+            /** Name */
+            name: string;
+            /** Owned By */
+            owned_by: string | null;
+            /** Status */
+            status: string;
+            /** Type */
+            type: string;
+            /** Verified */
+            verified: string | null;
+        };
+        /**
+         * NewsReadingRow
+         * @description One classification of one news item for one resolved instrument. Fields no rule or model
+         *     reading supports stay 'unknown'/None; ``confidence_basis`` names what the number is (a rule
+         *     prior is not a calibrated probability).
+         */
+        NewsReadingRow: {
+            /** Category */
+            category: string;
+            /**
+             * Classified At
+             * Format: date-time
+             */
+            classified_at: string;
+            /** Confidence */
+            confidence: number | null;
+            /** Confidence Basis */
+            confidence_basis: string;
+            /** Direction */
+            direction: string;
+            /** Evidence */
+            evidence: string[];
+            /** Horizon */
+            horizon: string;
+            /** Impact */
+            impact: string;
+            /** Instrument Key */
+            instrument_key: string;
+            /** Model */
+            model: string;
+            /** News Id */
+            news_id: string;
+            /** Rationale */
+            rationale: string;
+            /** Relevant */
+            relevant: boolean;
+            /** Rules Version */
+            rules_version: string;
+            /** Symbol */
+            symbol: string;
+            /** Uncertainties */
+            uncertainties: string[];
+        };
+        /**
+         * NewsRow
+         * @description One collected news item: headline, short summary, link, both timestamps (published and
+         *     received - never conflated), provenance, duplicate linkage and every reading of it.
+         */
+        NewsRow: {
+            /** Duplicate Of */
+            duplicate_of: string | null;
+            /** News Id */
+            news_id: string;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Readings */
+            readings: components["schemas"]["NewsReadingRow"][];
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /** Source Key */
+            source_key: string;
+            /** Source Name */
+            source_name: string;
+            /** Source Type */
+            source_type: string;
+            /** Summary */
+            summary: string;
+            /** Symbols */
+            symbols: components["schemas"]["NewsSymbolRow"][];
+            /** Title */
+            title: string;
+            /** Url */
+            url: string | null;
+        };
+        /**
+         * NewsSymbolRow
+         * @description One symbol mention in a news item, with the evidence - and whether it is *resolved*.
+         *     An ambiguous mention stays unresolved: a guessed instrument would price the wrong company.
+         */
+        NewsSymbolRow: {
+            /** Evidence */
+            evidence: string;
+            /** Instrument Key */
+            instrument_key: string | null;
+            /** Resolved */
+            resolved: boolean;
+            /** Symbol */
+            symbol: string;
         };
         /** OrderRow */
         OrderRow: {
@@ -3160,6 +3331,143 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Bars"];
+                };
+            };
+            /** @description Missing or wrong token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    news_api_news_get: {
+        parameters: {
+            query?: {
+                symbol?: string | null;
+                category?: string | null;
+                direction?: string | null;
+                source?: string | null;
+                date?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsRow"][];
+                };
+            };
+            /** @description Missing or wrong token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Invalid request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    news_feeds_api_news_feeds_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsFeedRow"][];
                 };
             };
             /** @description Missing or wrong token */

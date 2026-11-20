@@ -393,6 +393,79 @@ class TypedEventRow(ApiModel):
     data: dict[str, Any]
 
 
+# -- news (event-driven research; paper/visibility only, never an order path) ----------------------
+
+
+class NewsSymbolRow(ApiModel):
+    """One symbol mention in a news item, with the evidence - and whether it is *resolved*.
+    An ambiguous mention stays unresolved: a guessed instrument would price the wrong company."""
+
+    symbol: str
+    instrument_key: str | None
+    evidence: str
+    resolved: bool
+
+
+class NewsReadingRow(ApiModel):
+    """One classification of one news item for one resolved instrument. Fields no rule or model
+    reading supports stay 'unknown'/None; ``confidence_basis`` names what the number is (a rule
+    prior is not a calibrated probability)."""
+
+    news_id: str
+    instrument_key: str
+    symbol: str
+    category: str
+    direction: str
+    impact: str
+    horizon: str
+    confidence: float | None
+    confidence_basis: str
+    rationale: str
+    evidence: list[str]
+    uncertainties: list[str]
+    relevant: bool
+    model: str
+    rules_version: str
+    classified_at: datetime
+
+
+class NewsRow(ApiModel):
+    """One collected news item: headline, short summary, link, both timestamps (published and
+    received - never conflated), provenance, duplicate linkage and every reading of it."""
+
+    news_id: str
+    source_key: str
+    source_name: str
+    source_type: str
+    title: str
+    summary: str
+    url: str | None
+    published_at: datetime
+    received_at: datetime
+    duplicate_of: str | None
+    symbols: list[NewsSymbolRow]
+    readings: list[NewsReadingRow]
+
+
+class NewsFeedRow(ApiModel):
+    """One registry feed's health. ``status`` never reads a failure as quiet:
+    ``failing`` (down alert since the last success), ``quiet`` (no items for 48 h, no failure),
+    ``empty`` (no items yet), ``active``, ``disabled``, ``unverified``, or ``owned``
+    (collected by another component, e.g. the announcement ingestor)."""
+
+    key: str
+    name: str
+    type: str
+    enabled: bool
+    verified: str | None
+    owned_by: str | None
+    status: str
+    last_item_at: datetime | None
+    items_total: int
+    gaps: int
+    last_error: str | None
+
+
 class ReconcileRow(ApiModel):
     book_id: str
     scope: str

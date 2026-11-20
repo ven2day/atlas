@@ -35,6 +35,7 @@ MARKET_DATA = "market_data"
 MONITOR = "monitor"
 RECONCILER = "reconciler"
 ANNOUNCEMENTS = "announcements"
+NEWS = "news"
 MONITOR_INTERVAL_S = 60.0
 RECONCILE_INTERVAL_S = 15 * 60.0
 

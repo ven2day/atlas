@@ -24,6 +24,8 @@ The web console's server (`src/web/server.py`), from the OpenAPI document (`fron
 | GET | `/api/logs` | level, contains, limit | - | list[LogLine] | Logs |
 | GET | `/api/market/watchlist` | - | - | list[WatchRow] | Watchlist |
 | GET | `/api/market/{symbol}/bars` | days, adjusted | - | Bars | Bars |
+| GET | `/api/news` | symbol, category, direction, source, date, limit | - | list[NewsRow] | Collected news items with every reading of them, newest first. |
+| GET | `/api/news/feeds` | - | - | list[NewsFeedRow] | The registry's feeds with their recorded health: active, quiet, failing, empty, disabled, unverified, or owned by another collector. |
 | GET | `/api/orders` | book, status, date, symbol, limit | - | list[OrderRow] | Orders |
 | GET | `/api/positions` | book | - | list[PositionRow] | Positions |
 | GET | `/api/reports` | limit | - | list[ReportSummary] | Reports |
@@ -49,7 +51,7 @@ Token as the `rq.token.<token>` subprotocol (the server answers `rq.v1`). Send `
 | --- | --- | --- |
 | `ai` | events | BudgetThresholdCrossed, DecisionModelCall, LLMCall, TradeReview |
 | `decisions` | events | AdvisorFallback, AdvisorRequested, AdvisorVerdict, OrderIntentProposed, RiskDecision, ShadowAlphaSettled, ShadowTradeClosed, ShadowTradeOpened, SignalDisposition, SignalGenerated |
-| `market` | events | AnnouncementCoverageGap, AnnouncementReceived, BarClosed, DataSourceChanged, FeedRecovered, FeedStale, QuoteReceived, QuoteRejected, RegimeComputed, TypedEvent |
+| `market` | events | AnnouncementCoverageGap, AnnouncementReceived, BarClosed, DataSourceChanged, FeedRecovered, FeedStale, NewsClassified, NewsCoverageGap, NewsItemReceived, QuoteReceived, QuoteRejected, RegimeComputed, TypedEvent |
 | `orders` | events | FillReceived, OrderAcked, OrderCancelled, OrderExpired, OrderRejected, OrderSubmitted, OrderUnknown |
 | `positions` | events | MarkToMarket, PositionChanged, TradeClosed |
 | `risk` | events | ControlCommand, DailyRiskStateRolled, KillSwitchChanged, LimitBreached, ReconciliationResult |

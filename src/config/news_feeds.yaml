@@ -1,0 +1,73 @@
+# News RSS feed registry (plan: event-driven news research).
+#
+# Rules this file obeys:
+#   * The NSE announcements feed is listed for documentation ONLY - it is owned by
+#     AnnouncementIngestor (ANNOUNCEMENTS_URL / src/marketdata/announcements.py) with its own
+#     coverage-gap behaviour. The news collector never fetches a feed marked `owned_by`, so the
+#     exchange feed is never double-polled and its terms are never re-interpreted here.
+#   * A feed is fetched only when `enabled: true` AND `verified` carries the date someone ran
+#     `scripts/verify_news_feeds.py` against it successfully. An unverified URL stays disabled:
+#     the system never silently assumes a feed works, and a feed that stops answering shows up
+#     as failing/stale with coverage gaps - never as "no news".
+#   * Only headlines, a short summary, timestamps and the article link are stored; full article
+#     text is never copied (publisher terms).
+#
+# Verification status (scripts/verify_news_feeds.py --include-disabled, run 2026-11-20):
+#   et_markets, livemint_markets, business_standard_markets - OK, fresh items same day: ENABLED.
+#   moneycontrol_latest - reachable but FROZEN (newest item 2024-04-23): left disabled, because
+#     enabling an abandoned feed would present dead coverage as live.
+#   rbi_press_releases - the URL serves an HTML page listing feeds, not XML: left disabled until
+#     a direct feed URL is found and verified.
+# Re-verify periodically; a feed can rot. To add one: append an entry with a unique key;
+# http/https public hosts only - the collector refuses private/loopback/link-local destinations
+# and re-validates every redirect hop.
+
+feeds:
+  - key: nse_announcements
+    name: NSE corporate announcements
+    type: exchange_filing
+    url: https://nsearchives.nseindia.com/content/RSS/Online_announcements.xml
+    owned_by: announcements  # collected by AnnouncementIngestor, not the news collector
+    enabled: true
+    verified: "2026-10-02"
+    min_interval_s: 300
+
+  - key: moneycontrol_latest
+    name: Moneycontrol - latest news
+    type: media_news
+    url: https://www.moneycontrol.com/rss/latestnews.xml
+    enabled: false
+    verified: null  # 2026-11-20: reachable but frozen at 2024-04-23 - abandoned, not verified
+    min_interval_s: 300
+
+  - key: et_markets
+    name: Economic Times - markets
+    type: media_news
+    url: https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms
+    enabled: true
+    verified: "2026-11-20"  # 50 items, newest same-day
+    min_interval_s: 300
+
+  - key: livemint_markets
+    name: Mint - markets
+    type: media_news
+    url: https://www.livemint.com/rss/markets
+    enabled: true
+    verified: "2026-11-20"  # 35 items, newest same-day
+    min_interval_s: 300
+
+  - key: business_standard_markets
+    name: Business Standard - markets
+    type: media_news
+    url: https://www.business-standard.com/rss/markets-106.rss
+    enabled: true
+    verified: "2026-11-20"  # 35 items, newest same-day
+    min_interval_s: 300
+
+  - key: rbi_press_releases
+    name: RBI press releases
+    type: macro
+    url: https://website.rbi.org.in/en/rss-feeds
+    enabled: false
+    verified: null  # 2026-11-20: serves an HTML feed directory, not XML; needs a direct feed URL
+    min_interval_s: 900

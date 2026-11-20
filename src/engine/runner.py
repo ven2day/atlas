@@ -54,6 +54,7 @@ from src.engine.tasks import (
     MARKET_DATA,
     MONITOR,
     MONITOR_INTERVAL_S,
+    NEWS,
     RECONCILE_INTERVAL_S,
     RECONCILER,
     TaskGroup,
@@ -94,6 +95,18 @@ class AnnouncementSource(Protocol):
     def interval_s(self) -> float: ...
 
     async def poll(self, *, force: bool = False) -> Sequence[TypedEvent]: ...
+
+
+class NewsSource(Protocol):
+    """Polls the configured news feeds and classifies what resolved to an instrument.
+
+    Research and paper visibility only: nothing here feeds the decision engine directly -
+    news reaches trading solely through the existing research/event-gate paths."""
+
+    @property
+    def interval_s(self) -> float: ...
+
+    async def poll(self, *, force: bool = False) -> tuple[object, Sequence[object]]: ...
 
 
 @dataclass(frozen=True)
@@ -146,6 +159,7 @@ class Engine:
     lifecycle: SessionLifecycle
     tasks: TaskGroup
     announcements: AnnouncementSource | None = None
+    news: NewsSource | None = None
     ledger: ShadowLedger | None = None
     reporter: Callable[[date], Awaitable[None]] | None = None  # the daily report (M8.4)
     regime: Regime | None = None
@@ -302,6 +316,15 @@ class Engine:
         if announcements is not None:
             self.tasks.start(ANNOUNCEMENTS, self.announcements_step,
                              lambda: announcements.interval_s)  # fmt: skip
+        news = self.news
+        if news is not None:
+            self.tasks.start(NEWS, self.news_step, lambda: news.interval_s)
+
+    async def news_step(self, *, force: bool = False) -> None:
+        """Collect and classify news. Research/visibility only: no order path reads this."""
+        if self.news is None:
+            return
+        await self.news.poll(force=force)
 
     async def announcements_step(self, *, force: bool = False) -> None:
         """Ingest and classify; alert (never exit) on an adverse event for a held position."""
@@ -413,6 +436,7 @@ def build_engine(
     limits: RiskLimits,
     strategies: Mapping[str, Strategy] | None = None,
     announcements: AnnouncementSource | None = None,
+    news: NewsSource | None = None,
     advisors: Mapping[str, Advisor | None] | None = None,
 ) -> Engine:
     sink = StoreSink(store, clock, "engine")
@@ -453,7 +477,7 @@ def build_engine(
     market.add_listener(ledger.on_quote)
     engine = Engine(
         config=config, clock=clock, calendar=calendar, store=store, sink=sink, market=market,
-        books=books, decision=decision, announcements=announcements, ledger=ledger,
+        books=books, decision=decision, announcements=announcements, news=news, ledger=ledger,
         lifecycle=SessionLifecycle(clock=clock, calendar=calendar, sink=sink,
                                    config=config.lifecycle),
         tasks=TaskGroup(clock, sink),

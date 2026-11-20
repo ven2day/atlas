@@ -36,9 +36,10 @@ from src.decision_models.tasks.announcements import (
     RuleEventClassifier,
     unclassified,
 )
+from src.decision_models.tasks.news import NewsClassifier, NewsPipeline, unclassified_news
 from src.domain.calendar import get_calendar
 from src.domain.clock import Clock, ReplayClock, WallClock, now_ist
-from src.domain.events import Alert, AnnouncementReceived
+from src.domain.events import Alert, AnnouncementReceived, NewsClassified, NewsItemReceived
 from src.domain.types import Instrument
 from src.engine.demo import DEMO_DAY, DEMO_TAPE, ScriptedVeto, demo_instruments, pace
 from src.engine.market import INDEX_KEY, HistorySource, QuoteSource
@@ -69,6 +70,7 @@ from src.marketdata.dhan import (
 from src.marketdata.dhan.instruments import INDEX_SEGMENT, DhanMapping
 from src.marketdata.dhan.setup import build_history_cache, security_overrides
 from src.marketdata.history import YFinanceHistorySource
+from src.marketdata.news import FeedError, NewsCollector, load_news_feeds, news_watermark
 from src.marketdata.replay import TapeHistorySource, TapeQuoteSource
 from src.marketdata.validation import QuoteValidator, band_lookup
 from src.marketdata.yfinance_source import YFinanceQuoteSource
@@ -192,6 +194,7 @@ async def run_paper(
             config=config, clock=clock, calendar=calendar, store=store, quotes=quotes,
             history=history, universe=universe, limits=limits,
             announcements=_announcements(settings, store, clock, sink, priced, cascade),
+            news=_news(settings, store, clock, sink, priced, cascade),
         )  # fmt: skip
         advisors = build_advisors(experiment, sink=sink, clock=clock, calendar=calendar,
                                   cascade=cascade, router=router, events=engine.events_for,
@@ -240,6 +243,60 @@ def _announcements(
                                     backlog=backlog)  # fmt: skip
     classifier = EventClassifier(cascade=cascade, sink=sink, clock=clock)
     return AnnouncementPipeline(ingestor=ingestor, classifier=classifier, backlog=backlog)
+
+
+def _news(
+    settings: Settings,
+    store: EventStore,
+    clock: Clock,
+    sink: StoreSink,
+    instruments: dict[str, Instrument],
+    cascade: Cascade | None,
+) -> NewsPipeline | None:
+    """The news task: registry-driven public feeds, research/visibility only.
+
+    Off (None) when disabled, when the registry cannot be read, or when no feed is both enabled
+    and verified - an unverified feed is never fetched on an assumption. The NSE announcements
+    feed is owned by the announcement ingestor and is skipped here even if listed."""
+    if not settings.news_enabled:
+        return None
+    try:
+        feeds = load_news_feeds(settings.news_feeds_file)
+    except FeedError as exc:
+        sink.emit(Alert(level="WARNING", key="news_registry_invalid", message=str(exc)),
+                  source="news")  # fmt: skip
+        return None
+    fetchable = [f for f in feeds if f.fetchable]
+    held_back = [f.key for f in feeds if f.enabled and not f.fetchable and f.owned_by is None]
+    if held_back:
+        sink.emit(Alert(level="INFO", key="news_feeds_unverified",
+                        message=f"news feeds enabled but not verified stay disabled: "
+                                f"{', '.join(held_back)} (run scripts/verify_news_feeds.py)"),
+                  source="news")  # fmt: skip
+    if not fetchable:
+        logger.info("news: no enabled+verified feeds in the registry; the task stays off")
+        return None
+    sink.emit(Alert(level="INFO", key="news_feeds_active",
+                    message=f"polling {len(fetchable)} news feed(s): "
+                            f"{', '.join(f.key for f in fetchable)}"),
+              source="news")  # fmt: skip
+    stored = [p for e in store.read(types=["NewsItemReceived"])
+              if isinstance(p := e.payload, NewsItemReceived)]  # fmt: skip
+    seen, by_content, last_ok = news_watermark(stored)
+    equities = [i for i in instruments.values() if i.series == "EQ"]
+    collector = NewsCollector(
+        feeds=fetchable, instruments=equities, clock=clock, sink=sink,
+        timeout_s=settings.news_fetch_timeout_s, max_bytes=settings.news_max_response_bytes,
+        seen=seen, by_content=by_content, last_ok=last_ok,
+    )  # fmt: skip
+    classified_ids = {
+        p.news_id
+        for e in store.read(types=["NewsClassified"])
+        if isinstance(p := e.payload, NewsClassified)
+    }  # fmt: skip
+    classifier = NewsClassifier(sink=sink, clock=clock, cascade=cascade)
+    return NewsPipeline(collector=collector, classifier=classifier,
+                        backlog=unclassified_news(stored, classified_ids))  # fmt: skip
 
 
 async def run_demo(

@@ -2,7 +2,7 @@
 
 # Event catalogue
 
-Every fact the system records is one of these payloads, appended to the event store (`src/store/`) inside an envelope `{seq, ts_utc, ist_date, type, schema_version, decision_id, cycle_id, book_id, symbol, source, payload}`. Projections (orders, fills, positions, trades, decisions, ...) are pure functions of these events. 46 types; the stream topic is where the web console receives it.
+Every fact the system records is one of these payloads, appended to the event store (`src/store/`) inside an envelope `{seq, ts_utc, ist_date, type, schema_version, decision_id, cycle_id, book_id, symbol, source, payload}`. Projections (orders, fills, positions, trades, decisions, ...) are pure functions of these events. 49 types; the stream topic is where the web console receives it.
 
 | Type | Version | Topic | Description |
 | --- | --- | --- | --- |
@@ -28,6 +28,9 @@ Every fact the system records is one of these payloads, appended to the event st
 | [LimitBreached](#limitbreached) | 1 | risk | - |
 | [LoopLag](#looplag) | 1 | system | - |
 | [MarkToMarket](#marktomarket) | 1 | positions | - |
+| [NewsClassified](#newsclassified) | 1 | market | One reading of one news item for one resolved instrument. Fields the rules or the model cannot support stay ``unknown``/``None`` - an unclear item is labelled unclear, never given an invented direction, impact or certainty. ``confidence_basis`` says what the number is: a rule prior or a model answer is not a calibrated probability. |
+| [NewsCoverageGap](#newscoveragegap) | 1 | market | A news feed's polling window that may hold items this system never saw (fetch failure or a window that moved past the last success). Unknown coverage is never "no news". |
+| [NewsItemReceived](#newsitemreceived) | 1 | market | One item from a configured public news RSS feed, point in time: the publisher's ``published_at`` and our ``received_at`` are separate facts and are never conflated or backdated. Headline, short summary and the link are kept - never the full article. |
 | [OrderAcked](#orderacked) | 1 | orders | - |
 | [OrderCancelled](#ordercancelled) | 1 | orders | - |
 | [OrderExpired](#orderexpired) | 1 | orders | - |
@@ -302,6 +305,59 @@ One LLM attempt (plan M6 router): every fallback attempt is its own event.
 | `positions_value` | Decimal | - |
 | `unrealized_pnl` | Decimal | - |
 | `day_pnl` | Decimal | - |
+
+## NewsClassified
+
+One reading of one news item for one resolved instrument. Fields the rules or the model cannot support stay ``unknown``/``None`` - an unclear item is labelled unclear, never given an invented direction, impact or certainty. ``confidence_basis`` says what the number is: a rule prior or a model answer is not a calibrated probability.
+
+| Field | Type | Default |
+| --- | --- | --- |
+| `news_id` | str | - |
+| `instrument_key` | str | - |
+| `symbol` | str | - |
+| `category` | NewsCategory | - |
+| `direction` | NewsDirection | <NewsDirection.UNKNOWN: 'unknown'> |
+| `impact` | NewsImpact | <NewsImpact.UNKNOWN: 'unknown'> |
+| `horizon` | NewsHorizon | <NewsHorizon.UNKNOWN: 'unknown'> |
+| `confidence` | float \| None | unset |
+| `confidence_basis` | str | - |
+| `rationale` | str | - |
+| `evidence` | tuple[str, ...] | () |
+| `uncertainties` | tuple[str, ...] | () |
+| `relevant` | bool | False |
+| `model` | str | - |
+| `rules_version` | str | - |
+| `classified_at` | AwareDatetime | - |
+
+## NewsCoverageGap
+
+A news feed's polling window that may hold items this system never saw (fetch failure or a window that moved past the last success). Unknown coverage is never "no news".
+
+| Field | Type | Default |
+| --- | --- | --- |
+| `source_key` | str | - |
+| `gap_from` | AwareDatetime \| None | unset |
+| `gap_to` | AwareDatetime | - |
+| `reason` | str | - |
+
+## NewsItemReceived
+
+One item from a configured public news RSS feed, point in time: the publisher's ``published_at`` and our ``received_at`` are separate facts and are never conflated or backdated. Headline, short summary and the link are kept - never the full article.
+
+| Field | Type | Default |
+| --- | --- | --- |
+| `news_id` | str | - |
+| `source_key` | str | - |
+| `source_name` | str | - |
+| `source_type` | str | - |
+| `title` | str | - |
+| `summary` | str | '' |
+| `url` | str \| None | unset |
+| `published_at` | AwareDatetime | - |
+| `received_at` | AwareDatetime | - |
+| `symbols` | tuple[NewsSymbolMatch, ...] | () |
+| `content_hash` | str | - |
+| `duplicate_of` | str \| None | unset |
 
 ## OrderAcked
 

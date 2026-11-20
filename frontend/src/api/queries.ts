@@ -25,6 +25,8 @@ export const keys = {
   decisionModels: (q: Query) => ["ai", "decision-models", q] as const,
   bars: (symbol: string, days: number, adjusted = true) => ["bars", symbol, days, adjusted] as const,
   typed: (q: Query) => ["typed", q] as const,
+  news: (q: Query) => ["news", q] as const,
+  newsFeeds: ["news", "feeds"] as const,
   report: (day: string) => ["report", day] as const,
   research: (q: Query) => ["research", q] as const,
   researchEvaluation: ["research", "evaluation"] as const,
@@ -37,8 +39,8 @@ export const INVALIDATES: Record<string, string[]> = {
   decisions: ["decisions", "decision"],
   risk: ["risk", "summary"],
   ai: ["ai", "decision"],
-  market: ["typed", "bars"],
-  system: ["system", "alerts"],
+  market: ["typed", "bars", "news"], // news events ride the market topic
+  system: ["system", "alerts", "news"], // feed health is derived from alerts
 };
 
 /** Collects the topics of applied events and invalidates their queries at most once a second. */
